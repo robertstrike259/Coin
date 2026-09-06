@@ -2,6 +2,7 @@
 #include "difficulty.h"
 #include "pow.h"
 #include "hash.h"
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
 #include <ctime>

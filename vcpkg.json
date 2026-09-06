@@ -3,10 +3,6 @@
   "name": "coin",
   "version": "0.1.0",
   "dependencies": [
-    "openssl",
-    {
-      "name": "qtbase",
-      "platform": "!emscripten"
-    }
+    "openssl"
   ]
 }

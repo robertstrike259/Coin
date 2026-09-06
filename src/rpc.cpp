@@ -5,6 +5,8 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
+#include <ctime>
 using nlohmann::json;
 static std::string hexv(const std::vector<uint8_t>& v){ static const char*h="0123456789abcdef"; std::string s; for(auto b:v){s.push_back(h[b>>4]);s.push_back(h[b&15]);} return s; }
 static std::vector<uint8_t> unhex(const std::string& s){ std::vector<uint8_t> o; for(size_t i=0;i+1<s.size();i+=2){ o.push_back((uint8_t)strtoul(s.substr(i,2).c_str(),nullptr,16)); } return o; }

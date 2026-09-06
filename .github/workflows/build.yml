@@ -7,26 +7,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            ssl: sudo apt-get update && sudo apt-get install -y libssl-dev
+            ssl_pkgs: sudo apt-get update && sudo apt-get install -y libssl-dev
           - os: macos-latest
-            ssl: brew install openssl@3
+            ssl_pkgs: brew install openssl@3
           - os: windows-latest
-            ssl: vcpkg install openssl:x64-windows
+            ssl_pkgs: ""
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - name: OpenSSL (native package)
-        run: ${{ matrix.ssl }}
+      - uses: actions/checkout@v6
+      - name: OpenSSL (native package, unix)
+        if: runner.os != 'Windows'
+        run: ${{ matrix.ssl_pkgs }}
+      - name: OpenSSL (vcpkg, windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg" install openssl --triplet x64-windows
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" >> $env:GITHUB_ENV
       - name: Forbid em/en dashes in project sources
         shell: bash
         run: |
           if grep -rn --include='*.cpp' --include='*.h' --include='*.md' --include='*.txt' --include='*.yml' --include='*.json' -e $'\u2013' -e $'\u2014' src apps tests .github CMakeLists.txt vcpkg.json README.md SPEC.md; then
             echo "em/en dashes are forbidden in this project"; exit 1;
           fi
-      - name: Configure
+      - name: Configure (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)
+          fi
+          cmake -S . -B build -DWITH_QT=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Configure (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: cmake -S . -B build -DWITH_QT=OFF -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --config Release -j

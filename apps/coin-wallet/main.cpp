@@ -4,6 +4,9 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <cctype>
+#include <cstdlib>
+#include <string>
+#include <tuple>
 static std::vector<uint8_t> unhex(const std::string& s){ std::vector<uint8_t> o; for(size_t i=0;i+1<s.size();i+=2) o.push_back(strtoul(s.substr(i,2).c_str(),nullptr,16)); return o; }
 static std::string hexof(const std::vector<uint8_t>& v){ static const char*h="0123456789abcdef"; std::string s; for(auto b:v){s.push_back(h[b>>4]);s.push_back(h[b&15]);} return s; }
 // unspent entries from listunspent: {txid, vout, value_swarf, height}

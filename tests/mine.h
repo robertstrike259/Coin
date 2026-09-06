@@ -7,6 +7,7 @@
 #include <argon2.h>
 #include <cstring>
 #include <ctime>
+#include <stdexcept>
 inline Block mineBlock(Chain& chain, Mempool& pool, const std::vector<uint8_t>& payTo, bool includeMempool = true) {
   Block t;
   t.header.version = 1;

@@ -31,10 +31,13 @@ if(COIN_FETCH_DEPS)
   # libsecp256k1 (MIT, bitcoin-core) - ECDSA, replaces all hand-rolled ECC
   FetchContent_Declare(secp256k1
     GIT_REPOSITORY https://github.com/bitcoin-core/secp256k1.git
-    GIT_TAG v0.5.1)
+    GIT_TAG v0.8.0)
   set(SECP256K1_ENABLE_MODULE_RECOVERY OFF CACHE BOOL "" FORCE)
   set(SECP256K1_ENABLE_MODULE_EXTRAKEYS OFF CACHE BOOL "" FORCE)
   set(SECP256K1_ENABLE_MODULE_SCHNORRSIG OFF CACHE BOOL "" FORCE)
+  set(SECP256K1_ENABLE_MODULE_MUSIG OFF CACHE BOOL "" FORCE)
+  set(SECP256K1_ENABLE_MODULE_ELLSWIFT OFF CACHE BOOL "" FORCE)
+  set(SECP256K1_ENABLE_MODULE_SILENTPAYMENTS OFF CACHE BOOL "" FORCE)
   set(SECP256K1_BUILD_TESTS OFF CACHE BOOL "" FORCE)
   set(SECP256K1_BUILD_EXHAUSTIVE_TESTS OFF CACHE BOOL "" FORCE)
   set(SECP256K1_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -63,13 +66,13 @@ if(COIN_FETCH_DEPS)
   endif()
 
   # nlohmann/json (MIT) - RPC + wallet JSON
-  FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+  FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
   FetchContent_MakeAvailable(json)
 
   # doctest (MIT, single header) - test framework
   FetchContent_Declare(doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
-    GIT_TAG v2.4.11)
+    GIT_TAG v2.5.3)
   FetchContent_MakeAvailable(doctest)
 endif()
 

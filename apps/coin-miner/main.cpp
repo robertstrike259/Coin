@@ -11,6 +11,9 @@
 #include <atomic>
 #include <ctime>
 #include <cstring>
+#include <cstdlib>
+#include <string>
+#include <algorithm>
 static std::vector<uint8_t> unhex(const std::string& s){ std::vector<uint8_t> o; for(size_t i=0;i+1<s.size();i+=2) o.push_back(strtoul(s.substr(i,2).c_str(),nullptr,16)); return o; }
 int main(int argc,char**argv){
   int rpcport=19443, threads=1, nblocks=1; std::string addr, net="regtest";

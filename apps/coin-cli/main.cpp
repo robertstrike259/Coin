@@ -1,5 +1,6 @@
 #include "rpc.h"
 #include <iostream>
+#include <string>
 int main(int argc,char**argv){
   int rpcport=19443; std::string method="getblockchaininfo", params="{}";
   for(int i=1;i<argc;++i){ std::string a=argv[i];

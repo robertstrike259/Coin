@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstdio>
 #include <string>
 // Amounts in swarf. 1 CON = 100,000,000 swarf.
 using CAmount = int64_t;

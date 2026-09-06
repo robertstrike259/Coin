@@ -2,6 +2,7 @@
 #include "hash.h"
 #include "validation.h"
 #include "platform.h"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 std::vector<uint8_t> p2pMsg(const ChainParams& p,const std::string& cmd,const std::vector<uint8_t>& pl){

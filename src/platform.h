@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cerrno>
+#include <csignal>
 #include <openssl/rand.h>
 
 #ifdef _WIN32
@@ -42,7 +43,11 @@ inline int last_error() { return WSAGetLastError(); }
 #else
 using socket_t = int;
 inline constexpr socket_t BAD_SOCKET = -1;
-inline bool net_init() { return true; }
+// Writes to a dead peer must return EPIPE, never kill the process.
+inline bool net_init() {
+  signal(SIGPIPE, SIG_IGN);
+  return true;
+}
 inline void net_cleanup() {}
 inline void close_socket(socket_t s) { ::close(s); }
 inline int last_error() { return errno; }

@@ -1,6 +1,7 @@
 #include "core.h"
 #include "hash.h"
 #include "ecc.h"
+#include <algorithm>
 #include <cstring>
 std::vector<uint8_t> Transaction::serialize() const {
   SerWriter w; w.u32(version); w.varint(vin.size());
