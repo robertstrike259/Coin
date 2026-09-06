@@ -30,6 +30,7 @@ struct Chain {
   bool load(){ std::string e; return load(e); }
   bool save() const { std::string e; return save(e); }
   uint256 tipHash() const; int height() const;
+  uint32_t tipTime() const;
   uint32_t nextBits() const;
   Block makeGenesis();
   // Validates + connects; stores side branches; reorgs to longest valid chain.

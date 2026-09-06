@@ -9,6 +9,7 @@
 
 uint256 Chain::tipHash() const { std::lock_guard<std::mutex> l(m); return idx.empty()?uint256():idx.back().hash; }
 int Chain::height() const { std::lock_guard<std::mutex> l(m); return idx.empty()?-1:idx.back().height; }
+uint32_t Chain::tipTime() const { std::lock_guard<std::mutex> l(m); return idx.empty()?0:idx.back().time; }
 uint32_t Chain::nextBits() const {
   std::lock_guard<std::mutex> l(m);
   if(idx.empty()) return params.genesisBits;

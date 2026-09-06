@@ -20,6 +20,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: OpenSSL (native package)
         run: ${{ matrix.ssl }}
+      - name: Forbid em/en dashes in project sources
+        shell: bash
+        run: |
+          if grep -rn --include='*.cpp' --include='*.h' --include='*.md' --include='*.txt' --include='*.yml' --include='*.json' -e $'\u2013' -e $'\u2014' src apps tests .github CMakeLists.txt vcpkg.json README.md SPEC.md; then
+            echo "em/en dashes are forbidden in this project"; exit 1;
+          fi
       - name: Configure
         run: cmake -S . -B build -DWITH_QT=OFF -DCMAKE_BUILD_TYPE=Release
       - name: Build

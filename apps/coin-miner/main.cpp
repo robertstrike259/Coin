@@ -25,10 +25,13 @@ int main(int argc,char**argv){
     if((a=="--address"||a=="--mining-address")&&i+1<argc)addr=argv[++i]; }
   ChainParams p = net=="main"?mainParams():net=="testnet"?testParams():regtestParams();
   for(int b=0;b<nblocks;++b){
+    bool done=false;
+    for(int attempt=0;attempt<10&&!done;++attempt){
+    if(attempt>0) plt::sleep_ms(1100); // let clock/template advance past a reject
     nlohmann::json tj;
     try { tj=nlohmann::json::parse(rpcCall(rpcport,"getblocktemplate","{}")); }
-    catch(...){ std::cout<<"no template (bad rpc)\n"; return 1; }
-    if(!tj.contains("template_hex")){ std::cout<<"no template: "<<tj.dump()<<"\n"; return 1; }
+    catch(...){ std::cout<<"no template (bad rpc)\n"; continue; }
+    if(!tj.contains("template_hex")){ std::cout<<"no template: "<<tj.dump()<<"\n"; continue; }
     Block t=Block::deserialize(unhex(tj["template_hex"].get<std::string>()));
     // set mining payout if --address given: rebuild coinbase
     if(!addr.empty()){ uint8_t v; std::vector<uint8_t> h; if(addressToHash(addr,v,h)){ t.txs[0].vout[0].pubKeyHash=h; } }
@@ -39,7 +42,9 @@ int main(int argc,char**argv){
     std::atomic<bool> found=false; std::atomic<uint32_t> fnonce=0;
     auto worker=[&](int id){
       BlockHeader h=t.header;
-      for(uint32_t n=id;!found;n+=threads){ h.nonce=n; h.time=(uint32_t)time(nullptr);
+      for(uint32_t n=id;!found;n+=threads){ h.nonce=n;
+        // never go below the template time (it already encodes the tip+1 floor)
+        uint32_t now=(uint32_t)time(nullptr); h.time=now>t.header.time?now:t.header.time;
         auto hdr=h.serialize(); auto salt=h.powSalt(p.name);
         uint8_t out[32];
         if(argon2id_hash_raw(p.argonPasses,p.argonMemKib,1,hdr.data(),hdr.size(),salt.data(),salt.size(),out,sizeof out)!=ARGON2_OK) return;
@@ -51,8 +56,12 @@ int main(int argc,char**argv){
     std::vector<std::thread> th; for(int i=0;i<threads;++i) th.emplace_back(worker,i); for(auto&t2:th)t2.join();
     t.header.nonce=fnonce;
     auto s=t.serialize(); static const char*h="0123456789abcdef"; std::string hx; for(auto c:s){hx.push_back(h[c>>4]);hx.push_back(h[c&15]);}
-    std::cout<<"mined block h~ nonce="<<fnonce<<" txs="<<t.txs.size()<<"\n";
-    std::cout<<rpcCall(rpcport,"submitblock","{\"hex\":\""+hx+"\"}")<<"\n";
+    std::string res=rpcCall(rpcport,"submitblock","{\"hex\":\""+hx+"\"}");
+    std::cout<<"mined block h~ nonce="<<fnonce<<" txs="<<t.txs.size()<<"\n"<<res<<"\n";
+    if(res.find("\"ok\"")!=std::string::npos){ done=true; }
+    else std::cout<<"submit rejected, retrying with fresh template\n";
+    } // attempts
+    if(!done){ std::cout<<"gave up on block "<<b<<"\n"; return 1; }
   }
   return 0;
 }

@@ -28,7 +28,7 @@ find_package(OpenSSL REQUIRED)
 # ---- OSS deps via FetchContent ----
 include(FetchContent)
 if(COIN_FETCH_DEPS)
-  # libsecp256k1 (MIT, bitcoin-core) — ECDSA, replaces all hand-rolled ECC
+  # libsecp256k1 (MIT, bitcoin-core) - ECDSA, replaces all hand-rolled ECC
   FetchContent_Declare(secp256k1
     GIT_REPOSITORY https://github.com/bitcoin-core/secp256k1.git
     GIT_TAG v0.5.1)
@@ -41,7 +41,7 @@ if(COIN_FETCH_DEPS)
   set(SECP256K1_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(secp256k1)
 
-  # libargon2 reference (CC0/Apache-2.0, PHC winner) — Argon2id PoW.
+  # libargon2 reference (CC0/Apache-2.0, PHC winner) - Argon2id PoW.
   # Upstream has no CMake; compile its plain-C sources directly.
   FetchContent_Declare(argon2
     GIT_REPOSITORY https://github.com/P-H-C/phc-winner-argon2.git
@@ -62,11 +62,11 @@ if(COIN_FETCH_DEPS)
     endif()
   endif()
 
-  # nlohmann/json (MIT) — RPC + wallet JSON
+  # nlohmann/json (MIT) - RPC + wallet JSON
   FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
   FetchContent_MakeAvailable(json)
 
-  # doctest (MIT, single header) — test framework
+  # doctest (MIT, single header) - test framework
   FetchContent_Declare(doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
     GIT_TAG v2.4.11)

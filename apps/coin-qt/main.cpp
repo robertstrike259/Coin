@@ -10,7 +10,7 @@
 #include "rpc.h"
 int main(int argc,char**argv){
   QApplication app(argc,argv); QWidget w; w.setWindowTitle("Coin (CON) Wallet");
-  auto* lay=new QVBoxLayout(&w); auto* lab=new QLabel("Coin CON — 1 CON = 100,000,000 swarf"); lay->addWidget(lab);
+  auto* lay=new QVBoxLayout(&w); auto* lab=new QLabel("Coin CON - 1 CON = 100,000,000 swarf"); lay->addWidget(lab);
   auto* info=new QLabel("Use coin-cli for node RPC; this v0.1 GUI shows balance/address entry."); lay->addWidget(info);
   auto* addr=new QLineEdit(); addr->setPlaceholderText("CON address"); lay->addWidget(addr);
   auto* btn=new QPushButton("Refresh chain info"); lay->addWidget(btn);

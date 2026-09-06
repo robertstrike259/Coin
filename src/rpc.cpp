@@ -13,7 +13,12 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
   if(method=="getblockchaininfo"){ json j; j["chain"]=chain.params.name; j["height"]=chain.height(); j["tip"]=chain.tipHash().hex(); j["mempool"]=pool.size(); return j.dump(); }
   if(method=="getpeerinfo"){ json j; j["peers"]=self.peerCount?self.peerCount():0; return j.dump(); }
   if(method=="getblocktemplate"){
-    Block t; t.header.version=1; t.header.prevHash=chain.tipHash(); t.header.time=(uint32_t)time(nullptr); t.header.bits=chain.nextBits();
+    Block t; t.header.version=1; t.header.prevHash=chain.tipHash();
+    // Consensus requires time > median-past; floor at tip+1 so back-to-back
+    // templates in the same second stay valid (regtest mines instantly).
+    uint32_t now=(uint32_t)time(nullptr), tt=chain.tipTime();
+    t.header.time = now>tt ? now : tt+1;
+    t.header.bits=chain.nextBits();
     int nh = chain.height()+1;
     Transaction cb; cb.vin.resize(1); std::string tag="mined by CON";
     for(int i=0;i<4;++i) tag.push_back((nh>>(8*i))&0xff);

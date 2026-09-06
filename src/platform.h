@@ -1,7 +1,7 @@
 #pragma once
 // Cross-platform shim (Linux / macOS / Windows): sockets, sleep, pid,
 // default paths, secure RNG (OpenSSL), portable 64-bit multiply/add helpers.
-// Application glue only — all crypto/math comes from OSS libs (OpenSSL,
+// Application glue only - all crypto/math comes from OSS libs (OpenSSL,
 // libsecp256k1, libargon2).
 #include <cstdint>
 #include <string>

@@ -1,8 +1,8 @@
-# Coin (CON) — Bitcoin-like PoW with Argon2id
+# Coin (CON) - Bitcoin-like PoW with Argon2id
 1 CON = 100,000,000 swarf. Ticker CON. See SPEC.md.
 
 Cross-platform C++20 (Linux / macOS / Windows). All cryptography comes from
-established open-source libraries — no hand-rolled crypto:
+established open-source libraries - no hand-rolled crypto:
 
 | Use | Library | License |
 |---|---|---|
@@ -12,7 +12,7 @@ established open-source libraries — no hand-rolled crypto:
 | JSON (RPC) | nlohmann/json | MIT |
 | Tests | doctest | MIT |
 | GUI (optional) | Qt6 | LGPL |
-| Sockets | thin `src/platform.h` shim over BSD/WinSock | — |
+| Sockets | thin `src/platform.h` shim over BSD/WinSock | none |
 
 `secp256k1`, `argon2`, `nlohmann/json`, `doctest` are fetched automatically
 by CMake FetchContent (pinned tags). OpenSSL comes from the OS:

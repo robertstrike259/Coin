@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 // File wallet: N keys + addresses stored PLAINTEST in wallet.dat in v0.1
-// (no encryption yet — roadmap: AES-256-GCM with scrypt KDF; do not reuse
+// (no encryption yet - roadmap: AES-256-GCM with scrypt KDF; do not reuse
 // mainnet keys elsewhere until then).
 struct Wallet {
   std::string path; uint8_t addrVersion=0x6F;
