@@ -9,29 +9,20 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            ssl_pkgs: sudo apt-get update && sudo apt-get install -y libssl-dev
           - os: macos-latest
-            ssl_pkgs: brew install openssl@3
           - os: windows-latest
-            ssl_pkgs: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: OpenSSL (native package, unix)
         if: runner.os != 'Windows'
-        run: ${{ matrix.ssl_pkgs }}
-      - name: OpenSSL (vcpkg, windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg" install openssl --triplet x64-windows
-          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" >> $env:GITHUB_ENV
-      - name: Forbid em/en dashes in project sources
         shell: bash
         run: |
-          if grep -rn --include='*.cpp' --include='*.h' --include='*.md' --include='*.txt' --include='*.yml' --include='*.json' -e $'\u2013' -e $'\u2014' src apps tests .github CMakeLists.txt vcpkg.json README.md SPEC.md; then
-            echo "em/en dashes are forbidden in this project"; exit 1;
-          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y libssl-dev; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install openssl@3; fi
+      - name: Forbid em/en dashes in project sources
+        shell: bash
+        run: python3 scripts/forbid_dashes.py
       - name: Configure (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -43,7 +34,9 @@ jobs:
       - name: Configure (windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: cmake -S . -B build -DWITH_QT=OFF -DCMAKE_BUILD_TYPE=Release
+        env:
+          VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+        run: cmake -S . -B build -DWITH_QT=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
       - name: Build
         run: cmake --build build --config Release -j
       - name: Test
