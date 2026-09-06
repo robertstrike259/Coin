@@ -6,6 +6,7 @@
 #include <fstream>
 #include <filesystem>
 #include <ctime>
+#include <iterator>
 #include <algorithm>
 
 uint256 Chain::tipHash() const { std::lock_guard<std::mutex> l(m); return idx.empty()?uint256():idx.back().hash; }

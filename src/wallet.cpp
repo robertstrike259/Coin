@@ -2,6 +2,7 @@
 #include "hash.h"
 #include <fstream>
 #include <filesystem>
+#include <iterator>
 bool Wallet::load(const std::string& file,uint8_t ver){ path=file; addrVersion=ver; keys.clear();
   std::ifstream f(file,std::ios::binary); if(!f.good()) return true;
   try{ std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)),{}); SerReader r(d);

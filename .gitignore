@@ -12,3 +12,4 @@ wallet.dat
 .idea/
 .DS_Store
 Thumbs.db
+*.deb
