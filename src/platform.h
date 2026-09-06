@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cerrno>
 #include <csignal>
+#include <climits>
 #include <openssl/rand.h>
 
 #ifdef _WIN32
@@ -205,7 +206,10 @@ inline std::string default_datadir(const std::string& net) {
 }
 
 // Cryptographically secure RNG (OpenSSL). Never blocks on entropy.
+// Returns false on failure: callers handling key material must retry or
+// abort; callers needing only uniqueness may fall back explicitly.
 inline bool random_bytes(uint8_t* out, size_t n) {
+  if (n > (size_t)INT_MAX) return false;
   return RAND_bytes(out, (int)n) == 1;
 }
 inline bool random_bytes(std::vector<uint8_t>& v) { return random_bytes(v.data(), v.size()); }

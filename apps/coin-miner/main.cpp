@@ -38,8 +38,11 @@ int main(int argc,char**argv){
     Block t=Block::deserialize(unhex(tj["template_hex"].get<std::string>()));
     // set mining payout if --address given: rebuild coinbase
     if(!addr.empty()){ uint8_t v; std::vector<uint8_t> h; if(addressToHash(addr,v,h)){ t.txs[0].vout[0].pubKeyHash=h; } }
-    // extraNonce: random suffix guarantees unique coinbase even across miners on same template
-    { uint8_t r[4]; plt::random_bytes(r,4);
+    // extraNonce: random suffix guarantees unique coinbase even across miners on same template.
+    // Uniqueness (not secrecy) is what matters, so fall back to time-seeded
+    // bytes if the CSPRNG ever fails rather than mining a duplicate txid.
+    { uint8_t r[4];
+      if(!plt::random_bytes(r,4)){ uint32_t f=(uint32_t)time(nullptr)^(uint32_t)clock()^((uint32_t)plt::process_id()<<5); memcpy(r,&f,4); }
       for(int i=0;i<4;++i) t.txs[0].vin[0].scriptSig.push_back(r[i]);
       t.header.merkleRoot=merkleRoot(t.txs); }
     std::atomic<bool> found=false; std::atomic<uint32_t> fnonce=0;

@@ -2,7 +2,10 @@
 #include <doctest/doctest.h>
 #include "hash.h"
 #include "ecc.h"
+#include "platform.h"
 #include <argon2.h>
+#include <openssl/opensslv.h>
+#include <climits>
 #include <cstring>
 
 static std::string hx(const std::vector<uint8_t>& v) {
@@ -27,6 +30,28 @@ TEST_CASE("ripemd160 known vectors") {
   CHECK(hx(ripemd160("abc")) == "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc");
   CHECK(hx(ripemd160("The quick brown fox jumps over the lazy dog")) ==
         "37f332f68db77bd9d7edd4969571ad671cf9dd3b");
+}
+
+TEST_CASE("openssl version and provider availability") {
+  // RIPEMD160 via EVP needs OpenSSL 3.x with the default provider.
+  CHECK(OPENSSL_VERSION_NUMBER >= 0x30000000L);
+  CHECK(EVP_sha256() != nullptr);
+  CHECK(EVP_ripemd160() != nullptr);
+  CHECK(EVP_MD_get_size(EVP_sha256()) == 32);
+  CHECK(EVP_MD_get_size(EVP_ripemd160()) == 20);
+}
+
+TEST_CASE("CSPRNG behavior: sized draws, fresh entropy, oversize rejected") {
+  std::vector<uint8_t> a(32), b(32);
+  CHECK(plt::random_bytes(a));
+  CHECK(plt::random_bytes(b));
+  CHECK(a.size() == 32); CHECK(b.size() == 32);
+  CHECK(a != b); // 2^-256 flake probability; failure means broken RNG
+  std::vector<uint8_t> one(1), big(64);
+  CHECK(plt::random_bytes(one)); CHECK(one.size() == 1);
+  CHECK(plt::random_bytes(big)); CHECK(big.size() == 64);
+  uint8_t byte = 0;
+  CHECK(!plt::random_bytes(&byte, (size_t)INT_MAX + 1)); // overflow guard
 }
 
 TEST_CASE("argon2id official KAT (RFC 9106 / libargon2 kats)") {

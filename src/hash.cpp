@@ -8,12 +8,11 @@ std::vector<uint8_t> evp_once(const EVP_MD* md, const uint8_t* d, size_t n) {
   if (!c) throw std::runtime_error("EVP_MD_CTX_new failed");
   std::vector<uint8_t> out(EVP_MAX_MD_SIZE);
   unsigned int olen = 0;
-  if (EVP_DigestInit_ex(c, md, nullptr) != 1 || EVP_DigestUpdate(c, d, n) != 1 ||
-      EVP_DigestFinal_ex(c, out.data(), &olen) != 1) {
-    EVP_MD_CTX_free(c);
-    throw std::runtime_error("hash failed (OpenSSL provider missing algorithm?)");
-  }
+  bool ok = EVP_DigestInit_ex(c, md, nullptr) == 1 && EVP_DigestUpdate(c, d, n) == 1 &&
+            EVP_DigestFinal_ex(c, out.data(), &olen) == 1 &&
+            olen == (unsigned)EVP_MD_get_size(md) && olen <= out.size();
   EVP_MD_CTX_free(c);
+  if (!ok) throw std::runtime_error("hash failed (OpenSSL provider missing algorithm?)");
   out.resize(olen);
   return out;
 }
