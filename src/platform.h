@@ -171,7 +171,7 @@ inline uint64_t process_id() {
 inline void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 inline void sleep_sec(int s) { std::this_thread::sleep_for(std::chrono::seconds(s)); }
 
-// ~/… expansion + per-OS default datadir.
+// ~/... expansion + per-OS default datadir.
 inline std::string home_dir() {
 #ifdef _WIN32
   const char* h = std::getenv("USERPROFILE");

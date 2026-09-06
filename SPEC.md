@@ -5,7 +5,7 @@
   halving every 840000 blocks; retarget every 720 blocks (Bitcoin nBits format).
 - Testnet/regtest same but regtest: fixed low difficulty, fast Argon2id (1 MiB, t=1).
 - Header (80B): version|prevHash|merkleRoot|time|bits|nonce. PoW hash =
-  reference libargon2 Argon2id(password=header, salt="CON…"+prevHash,
+  reference libargon2 Argon2id(password=header, salt="CON..."+prevHash,
   m, t, lanes=1, out=32). Valid iff hash (LE uint256) <= target(bits).
   Lanes=1 in v1 (single-lane Argon2id is still memory-hard; p=4 reserved for a
   future header version). PoW memory: mainnet 32 MiB/t=1, testnet 16 MiB/t=1,
