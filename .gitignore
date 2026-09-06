@@ -1,0 +1,14 @@
+# build output (incl. FetchContent _deps)
+/build/
+# compiler artifacts
+*.o
+*.a
+*.so
+# local runtime data (never commit keys or chains)
+*.dat
+wallet.dat
+# editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

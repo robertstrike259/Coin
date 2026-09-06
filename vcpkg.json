@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-toolchains/main/vcpkg.json",
+  "name": "coin",
+  "version": "0.1.0",
+  "dependencies": [
+    "openssl",
+    {
+      "name": "qtbase",
+      "platform": "!emscripten"
+    }
+  ]
+}
