@@ -37,13 +37,17 @@ Default datadirs: Linux `~/.coin/<net>`, macOS
 
 ## Quick regtest (2 nodes, mine, transfer, sync)
 ```
-./build/coin-wallet --datadir /tmp/c1 --regtest newkey   # -> ADDR
+echo swordfish > /tmp/pw && chmod 600 /tmp/pw
+./build/coin-wallet --datadir /tmp/c1 --regtest --password-file /tmp/pw newkey   # -> ADDR
 ./build/coind --datadir /tmp/c1 --regtest --port 19444 --rpcport 19443 --mining-address ADDR &
 ./build/coin-miner --rpcport 19443 --address ADDR --threads 2 --blocks 2
-./build/coin-wallet --datadir /tmp/c1 --regtest --rpcport 19443 balance ADDR
+./build/coin-wallet --datadir /tmp/c1 --regtest --rpcport 19443 --password-file /tmp/pw balance ADDR
 ./build/coind --datadir /tmp/c2 --regtest --port 19445 --rpcport 19446 --peer 127.0.0.1:19444 &
 ./build/coin-cli --rpcport 19446 getblockchaininfo   # same tip as node 1
 ```
+Wallet password: `--password-file PATH` (0600 file, first line) or an
+interactive no-echo prompt. `encrypt` migrates legacy plaintext wallets,
+`changepass --new-password-file F` rotates the passphrase.
 ## Layout
 src/: uint256, serialize, amount (swarf), chainparams, core (tx/block/address),
 difficulty (portable, MSVC-safe), pow (libargon2), validation (BIP30),

@@ -36,5 +36,13 @@
   relay, real peer counts in RPC.
 - Storage: atomic `blocks.dat` writes (`CON1` magic + checksum); corrupt files
   are archived to `.corrupt`, never silently wiped.
-- Wallet: `wallet.dat` is PLAINTEXT in v0.1 (AES-256-GCM + KDF on roadmap).
+- Wallet: `wallet.dat` is AES-256-GCM encrypted (OpenSSL EVP) under a key
+  derived by Argon2id (64 MiB, 3 passes, 1 lane) from the user passphrase.
+  File layout: `CONW` magic, version, KDF params, 16-byte salt, 12-byte nonce,
+  ciphertext length, ciphertext, 16-byte tag; the header is GCM AAD so KDF
+  params cannot be tampered with. Fresh salt+nonce per save, atomic tmp+rename
+  writes, 0600 permissions, password/plaintext buffers cleansed after use.
+  Legacy v1 plaintext wallets load read-only for one-time migration via
+  `coin-wallet encrypt` (use `changepass` with `--new-password-file` to rotate).
+  Backups: copy the encrypted file; losing the passphrase loses the funds.
 - Coinbase maturity 100 blocks is NOT yet consensus-enforced in v0.1 (roadmap); max block 2MB.

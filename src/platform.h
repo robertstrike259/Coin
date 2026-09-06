@@ -37,6 +37,12 @@
 #include <unistd.h>
 #endif
 
+#ifdef _WIN32
+#include <conio.h>
+#else
+#include <termios.h>
+#endif
+
 namespace plt {
 #ifdef _WIN32
 using socket_t = SOCKET;
@@ -205,6 +211,41 @@ inline std::string default_datadir(const std::string& net) {
 #endif
 }
 
+// Secure password prompt: no echo, empty on EOF/error. Caller cleanses after use.
+inline std::string read_password(const std::string& prompt) {
+  std::string out;
+#ifdef _WIN32
+  fputs(prompt.c_str(), stderr);
+  for (;;) {
+    int c = _getch();
+    if (c == '\r' || c == '\n' || c == EOF) break;
+    if ((c == '\b' || c == 127) && !out.empty()) {
+      out.pop_back();
+      continue;
+    }
+    if (c >= 32 && c < 127 && out.size() < 1024) out.push_back((char)c);
+  }
+  fputs("\n", stderr);
+#else
+  fputs(prompt.c_str(), stderr);
+  fflush(stderr);
+  termios oldT{};
+  bool haveT = tcgetattr(STDIN_FILENO, &oldT) == 0;
+  if (haveT) {
+    termios t = oldT;
+    t.c_lflag &= ~(ECHO | ECHONL);
+    tcsetattr(STDIN_FILENO, TCSANOW, &t);
+  }
+  char buf[1024];
+  if (fgets(buf, sizeof buf, stdin)) {
+    out = buf;
+    while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+  }
+  if (haveT) tcsetattr(STDIN_FILENO, TCSANOW, &oldT);
+  fputs("\n", stderr);
+#endif
+  return out;
+}
 // Cryptographically secure RNG (OpenSSL). Never blocks on entropy.
 // Returns false on failure: callers handling key material must retry or
 // abort; callers needing only uniqueness may fall back explicitly.

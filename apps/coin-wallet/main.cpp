@@ -1,10 +1,14 @@
 #include "config.h"
 #include "wallet.h"
 #include "rpc.h"
+#include "platform.h"
 #include <nlohmann/json.hpp>
+#include <openssl/crypto.h>
 #include <iostream>
+#include <fstream>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <tuple>
 static std::vector<uint8_t> unhex(const std::string& s){ std::vector<uint8_t> o; for(size_t i=0;i+1<s.size();i+=2) o.push_back(strtoul(s.substr(i,2).c_str(),nullptr,16)); return o; }
@@ -17,16 +21,67 @@ static void parseUnspent(const std::string& js, std::vector<std::tuple<std::stri
       out.emplace_back(e["txid"].get<std::string>(),e["vout"].get<uint32_t>(),e["value_swarf"].get<CAmount>(),e["height"].get<int>());
   }catch(...){}
 }
+static std::string argval(int argc,char**argv,const std::string& k){
+  for(int i=1;i<argc;++i){ std::string a=argv[i];
+    if(a==k&&i+1<argc) return argv[i+1];
+    if(a.rfind(k+"=",0)==0) return a.substr(k.size()+1); }
+  return "";
+}
+// Password source: --password-file PATH (first line), else secure prompt.
+// Returned string must be cleansed by the caller when done.
+static std::string getPassword(int argc,char**argv,const std::string& flag,const std::string& prompt){
+  std::string f=argval(argc,argv,flag);
+  if(!f.empty()){
+    std::ifstream in(f,std::ios::binary); std::string pw;
+    if(in&&std::getline(in,pw)){ while(!pw.empty()&&(pw.back()=='\n'||pw.back()=='\r'))pw.pop_back(); return pw; }
+    std::cout<<"cannot read "<<flag<<" "<<f<<"\n"; return "";
+  }
+  return plt::read_password(prompt);
+}
+static void cleanse(std::string& s){ if(!s.empty()) OPENSSL_cleanse(s.data(),s.size()); s.clear(); }
 int main(int argc,char**argv){
-  if(argc<2){ std::cout<<"coin-wallet [--datadir D --net N --rpcport P] newkey|addresses|balance ADDR|send FROM TO CON_AMOUNT\n"; return 0; }
+  if(argc<2){ std::cout<<"coin-wallet [--datadir D --net N --rpcport P --password-file F] newkey|addresses|balance ADDR|send FROM TO CON_AMOUNT|encrypt|changepass\n"; return 0; }
   Config c=parseArgs(argc,argv,"coin-wallet");
-  for(int i=1;i<argc;++i){ std::string a=argv[i]; if(a=="--rpcport"&&i+1<argc) c.rpcport=std::stoi(argv[++i]); }
-  Wallet w; if(!w.load(c.datadir+"/wallet.dat", c.params().addrVersion)){ std::cout<<"wallet.dat corrupt, refusing to touch it\n"; return 1; }
+  for(int i=1;i<argc;++i){ std::string a=argv[i]; if(a=="--rpcport"&&i+1<argc){ try{c.rpcport=std::stoi(argv[++i]);}catch(...){} } }
+  std::string wfile=c.datadir+"/wallet.dat";
   std::string cmd;
   for(int i=1;i<argc;++i){ std::string a=argv[i];
-    if(a=="newkey"||a=="addresses"||a=="send"||a=="balance"){ cmd=a; break; }
+    if(a=="newkey"||a=="addresses"||a=="send"||a=="balance"||a=="encrypt"||a=="changepass"){ cmd=a; break; }
   }
-  if(cmd=="newkey"){ auto a=w.newKey(); w.save(); std::cout<<a<<"\n"; }
+  if(cmd=="encrypt"){ // migrate legacy plaintext -> encrypted (or re-encrypt)
+    Wallet w; if(!w.load(wfile,c.params().addrVersion)){ std::cout<<"cannot read wallet (wrong state?)\n"; return 1; }
+    if(w.encrypted){ std::cout<<"already encrypted; use changepass to rotate\n"; return 1; }
+    std::string pw=getPassword(argc,argv,"--password-file","New wallet password: ");
+    if(pw.empty()){ std::cout<<"empty password refused\n"; return 1; }
+    bool ok=w.save(wfile,pw); cleanse(pw);
+    std::cout<<(ok?"encrypted\n":"encrypt failed\n"); return ok?0:1;
+  }
+  if(cmd=="changepass"){
+    std::string npf=argval(argc,argv,"--new-password-file");
+    if(npf.empty()){ std::cout<<"need --new-password-file\n"; return 1; }
+    std::string pw=getPassword(argc,argv,"--password-file","Current wallet password: ");
+    Wallet w; if(!w.load(wfile,c.params().addrVersion,pw)){ cleanse(pw); std::cout<<"decrypt failed (wrong password?)\n"; return 1; }
+    cleanse(pw);
+    std::ifstream in(npf,std::ios::binary); std::string npw;
+    if(!(in&&std::getline(in,npw))){ std::cout<<"cannot read new password file\n"; return 1; }
+    while(!npw.empty()&&(npw.back()=='\n'||npw.back()=='\r'))npw.pop_back();
+    if(npw.empty()){ std::cout<<"empty password refused\n"; return 1; }
+    bool ok=w.save(wfile,npw); cleanse(npw);
+    std::cout<<(ok?"password changed\n":"change failed\n"); return ok?0:1;
+  }
+  std::string pw=getPassword(argc,argv,"--password-file","Wallet password: ");
+  Wallet w; if(!w.load(wfile,c.params().addrVersion,pw)){
+    // Legacy plaintext loads without password; encrypted needs it.
+    Wallet probe; bool legacy=false;
+    { std::ifstream f(wfile,std::ios::binary); char mg[4]={0}; f.read(mg,4);
+      legacy = !f.good() || memcmp(mg,"CONW",4)!=0; }
+    cleanse(pw);
+    if(legacy){ std::cout<<"wallet is plaintext legacy: run 'encrypt' first\n"; }
+    else std::cout<<"decrypt failed (wrong password or corrupt wallet)\n";
+    return 1;
+  }
+  int rc=0;
+  if(cmd=="newkey"){ auto a=w.newKey(); if(!w.save(wfile,pw)) { std::cout<<"save failed\n"; rc=1; } else std::cout<<a<<"\n"; }
   else if(cmd=="addresses"){ for(auto&a:w.addresses()) std::cout<<a<<"\n"; }
   else if(cmd=="balance"){
     std::string addr; for(int i=1;i<argc;++i){ if(std::string(argv[i])=="balance"&&i+1<argc){addr=argv[i+1];break;} }
@@ -35,21 +90,28 @@ int main(int argc,char**argv){
   else if(cmd=="send"){ // send FROM TO CONs
     std::string from, to; double amt=0;
     for(int i=1;i<argc;++i){ if(std::string(argv[i])=="send"&&i+3<argc){ from=argv[i+1]; to=argv[i+2]; amt=atof(argv[i+3]); break; } }
-    if(!(amt>0)){ std::cout<<"amount must be positive\n"; return 1; }
-    CAmount swarf=(CAmount)(amt*100000000.0+0.5), fee=1000;
-    if(swarf<=0){ std::cout<<"amount too small\n"; return 1; }
-    if(!w.has(from)){ std::cout<<"no key for "<<from<<"\n"; return 1; }
-    auto uj=rpcCall(c.rpcport,"listunspent","{\"address\":\""+from+"\"}");
-    std::vector<std::tuple<std::string,uint32_t,CAmount,int>> u; parseUnspent(uj,u);
-    if(u.empty()){ std::cout<<"no unspent for "<<from<<": "<<uj<<"\n"; return 1; }
-    std::map<OutPoint,Coin> view;
-    uint8_t vv; std::vector<uint8_t> fh;
-    { PubKey pk; auto it=w.keys.find(from); ecc_pubkey(it->second,pk); fh=hash160_pubkey({pk.d.begin(),pk.d.end()}); }
-    for(auto&e:u){ OutPoint o{uint256::fromHex(std::get<0>(e)),std::get<1>(e)}; view[o]={std::get<2>(e),fh,std::get<3>(e),false}; }
-    std::string why; Transaction t=buildSpend(w,view,from,to,swarf,fee,c.params().addrVersion,why);
-    if(t.vin.empty()){ std::cout<<"build failed: "<<why<<"\n"; return 1; }
-    std::cout<<rpcCall(c.rpcport,"sendrawtransaction","{\"hex\":\""+hexof(t.serialize())+"\"}")<<"\n";
+    if(!(amt>0)){ std::cout<<"amount must be positive\n"; rc=1; }
+    else{
+      CAmount swarf=(CAmount)(amt*100000000.0+0.5), fee=1000;
+      if(swarf<=0){ std::cout<<"amount too small\n"; rc=1; }
+      else if(!w.has(from)){ std::cout<<"no key for "<<from<<"\n"; rc=1; }
+      else{
+        auto uj=rpcCall(c.rpcport,"listunspent","{\"address\":\""+from+"\"}");
+        std::vector<std::tuple<std::string,uint32_t,CAmount,int>> u; parseUnspent(uj,u);
+        if(u.empty()){ std::cout<<"no unspent for "<<from<<": "<<uj<<"\n"; rc=1; }
+        else{
+          std::map<OutPoint,Coin> view;
+          { PubKey pk; auto it=w.keys.find(from); ecc_pubkey(it->second,pk);
+            auto fh=hash160_pubkey({pk.d.begin(),pk.d.end()});
+            for(auto&e:u){ OutPoint o{uint256::fromHex(std::get<0>(e)),std::get<1>(e)}; view[o]={std::get<2>(e),fh,std::get<3>(e),false}; } }
+          std::string why; Transaction t=buildSpend(w,view,from,to,swarf,fee,c.params().addrVersion,why);
+          if(t.vin.empty()){ std::cout<<"build failed: "<<why<<"\n"; rc=1; }
+          else std::cout<<rpcCall(c.rpcport,"sendrawtransaction","{\"hex\":\""+hexof(t.serialize())+"\"}")<<"\n";
+        }
+      }
+    }
   }
-  else std::cout<<"unknown cmd\n";
-  return 0;
+  else{ std::cout<<"unknown cmd\n"; rc=1; }
+  cleanse(pw);
+  return rc;
 }
