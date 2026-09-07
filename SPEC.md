@@ -3,7 +3,14 @@
 - UTXO + P2PKH-only v1. No Script opcodes.
 - Mainnet: MAX 84M CON + tail 1 CON/block; block 120s; genesis reward 100 CON;
   halving every 840000 blocks; retarget every 720 blocks (Bitcoin nBits format).
-- Testnet/regtest same but regtest: fixed low difficulty, fast Argon2id (1 MiB, t=1).
+- Networks (all: 100 CON genesis reward, halving every 840000, 1 CON tail,
+  2MB blocks, genesis bits 0x207fffff):
+  - main: P2P 8444 / RPC 8443, 120s blocks, retarget 720, Argon2id 32 MiB/t=1,
+    address version 0x1C.
+  - testnet: P2P 18444 / RPC 18443, 120s blocks, retarget 720, Argon2id
+    16 MiB/t=1, address version 0x6F.
+  - regtest: P2P 19444 / RPC 19443, 5s blocks, retarget 20, Argon2id
+    1 MiB/t=1, address version 0x6F.
 - Header (80B): version|prevHash|merkleRoot|time|bits|nonce. PoW hash =
   reference libargon2 Argon2id(password=header, salt="CON..."+prevHash,
   m, t, lanes=1, out=32). Valid iff hash (LE uint256) <= target(bits).

@@ -24,12 +24,11 @@ Exact pins, the CVE audit, and the upgrade policy live in DEPENDENCIES.md.
 sudo apt install libssl-dev cmake g++ git
 # macOS
 brew install openssl@3 cmake git
-# Windows (vcpkg provides OpenSSL; or: choco install openssl)
-vcpkg install openssl:x64-windows
+# Windows (vcpkg manifest mode: OpenSSL installs automatically at configure)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake
 
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-ctest --test-dir build --output-on-failure
+cmake --build build --config Release -j   # low-memory machines: -j2 or -j1
+ctest --test-dir build --output-on-failure -C Release   # -C only needed on Windows
 ```
 Binaries: `coind`, `coin-miner`, `coin-wallet`, `coin-cli` (+ `coin-qt` if Qt6 found).
 
@@ -49,10 +48,14 @@ echo swordfish > /tmp/pw && chmod 600 /tmp/pw
 Wallet password: `--password-file PATH` (0600 file, first line) or an
 interactive no-echo prompt. `encrypt` migrates legacy plaintext wallets,
 `changepass --new-password-file F` rotates the passphrase.
+Note: coinbase rewards mature after 100 blocks, so mine ~100 blocks before a
+transfer will succeed (`--blocks 101`).
 ## Layout
 src/: uint256, serialize, amount (swarf), chainparams, core (tx/block/address),
-difficulty (portable, MSVC-safe), pow (libargon2), validation (BIP30),
-mempool, chain, ecc (libsecp256k1), hash (OpenSSL), p2p, rpc (JSON), wallet,
-config, platform (OS shim)
+difficulty (portable, MSVC-safe), pow (libargon2), validation (BIP30, maturity),
+mempool, chain (+undo/reorg), ecc (libsecp256k1), hash (OpenSSL), net (Asio),
+p2p, rpc (JSON), wallet (AES-GCM), secure (memory hygiene), config,
+platform (OS shim)
 apps/: coind, coin-miner, coin-wallet, coin-cli, coin-qt
-tests/: doctest suites (crypto/core/validation/chain/wallet/net)
+tests/: doctest suites (crypto/core/validation/chain/wallet/net/fuzz/secure)
+scripts/: forbid_dashes.py, audit_deps.py
