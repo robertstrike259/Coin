@@ -35,6 +35,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #endif
 
 #ifdef _WIN32
@@ -255,8 +256,30 @@ inline bool random_bytes(uint8_t* out, size_t n) {
 }
 inline bool random_bytes(std::vector<uint8_t>& v) { return random_bytes(v.data(), v.size()); }
 
-// Portable 64x64->128 multiply (MSVC has no __uint128_t).
-// Returns low 64 bits, stores high 64 in *hi.
+// Lock secret pages against swap (best effort: may fail under RLIMIT_MEMLOCK
+// or without privileges; cleansing remains the real guarantee either way).
+// Every lock_memory must pair with exactly one unlock_memory.
+inline void lock_memory(void* p, size_t n) {
+  if (!p || !n) return;
+#ifdef _WIN32
+  VirtualLock(p, n);
+#elif defined(__unix__) || defined(__APPLE__)
+  mlock(p, n);
+#if defined(__linux__) && defined(MADV_DONTDUMP)
+  madvise(p, n, MADV_DONTDUMP); // keep secrets out of core dumps (Linux)
+#endif
+#endif
+}
+inline void unlock_memory(void* p, size_t n) {
+  if (!p || !n) return;
+#ifdef _WIN32
+  VirtualUnlock(p, n);
+#elif defined(__unix__) || defined(__APPLE__)
+  munlock(p, n);
+#endif
+}
+
+// Portable 64x64->128 multiply (MSVC has no __uint128_t).// Returns low 64 bits, stores high 64 in *hi.
 inline uint64_t mul_u64(uint64_t a, uint64_t b, uint64_t* hi) {
 #if defined(_MSC_VER) && defined(_M_X64)
   return _umul128(a, b, hi);

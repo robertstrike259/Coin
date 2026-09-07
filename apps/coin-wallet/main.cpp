@@ -28,17 +28,24 @@ static std::string argval(int argc,char**argv,const std::string& k){
   return "";
 }
 // Password source: --password-file PATH (first line), else secure prompt.
-// Returned string must be cleansed by the caller when done.
-static std::string getPassword(int argc,char**argv,const std::string& flag,const std::string& prompt){
+// Single heap allocation, cleansed on destroy; no std::string copies.
+static SecureString getPassword(int argc,char**argv,const std::string& flag,const std::string& prompt){
+  SecureString pw;
   std::string f=argval(argc,argv,flag);
   if(!f.empty()){
-    std::ifstream in(f,std::ios::binary); std::string pw;
-    if(in&&std::getline(in,pw)){ while(!pw.empty()&&(pw.back()=='\n'||pw.back()=='\r'))pw.pop_back(); return pw; }
-    std::cout<<"cannot read "<<flag<<" "<<f<<"\n"; return "";
+    std::ifstream in(f,std::ios::binary);
+    char buf[1024]; size_t n=0;
+    if(in){ int c; while(n<sizeof buf&&(c=in.get())!=EOF&&c!='\n'&&c!='\r'){ buf[n++]=(char)c; } }
+    if(n==0){ std::cout<<"cannot read "<<flag<<" "<<f<<"\n"; }
+    else { pw.assign(buf,n); }
+    OPENSSL_cleanse(buf,sizeof buf);
+    return pw;
   }
-  return plt::read_password(prompt);
+  std::string shown=plt::read_password(prompt); // echoed-off TTY input (short-lived)
+  pw.assign(shown.data(),shown.size());
+  OPENSSL_cleanse(shown.data(),shown.size());
+  return pw;
 }
-static void cleanse(std::string& s){ if(!s.empty()) OPENSSL_cleanse(s.data(),s.size()); s.clear(); }
 int main(int argc,char**argv){
   if(argc<2){ std::cout<<"coin-wallet [--datadir D --net N --rpcport P --password-file F] newkey|addresses|balance ADDR|send FROM TO CON_AMOUNT|encrypt|changepass\n"; return 0; }
   Config c=parseArgs(argc,argv,"coin-wallet");
@@ -51,31 +58,32 @@ int main(int argc,char**argv){
   if(cmd=="encrypt"){ // migrate legacy plaintext -> encrypted (or re-encrypt)
     Wallet w; if(!w.load(wfile,c.params().addrVersion)){ std::cout<<"cannot read wallet (wrong state?)\n"; return 1; }
     if(w.encrypted){ std::cout<<"already encrypted; use changepass to rotate\n"; return 1; }
-    std::string pw=getPassword(argc,argv,"--password-file","New wallet password: ");
+    SecureString pw=getPassword(argc,argv,"--password-file","New wallet password: ");
     if(pw.empty()){ std::cout<<"empty password refused\n"; return 1; }
-    bool ok=w.save(wfile,pw); cleanse(pw);
+    bool ok=w.save(wfile,pw); pw.clear();
     std::cout<<(ok?"encrypted\n":"encrypt failed\n"); return ok?0:1;
   }
   if(cmd=="changepass"){
     std::string npf=argval(argc,argv,"--new-password-file");
     if(npf.empty()){ std::cout<<"need --new-password-file\n"; return 1; }
-    std::string pw=getPassword(argc,argv,"--password-file","Current wallet password: ");
-    Wallet w; if(!w.load(wfile,c.params().addrVersion,pw)){ cleanse(pw); std::cout<<"decrypt failed (wrong password?)\n"; return 1; }
-    cleanse(pw);
-    std::ifstream in(npf,std::ios::binary); std::string npw;
-    if(!(in&&std::getline(in,npw))){ std::cout<<"cannot read new password file\n"; return 1; }
-    while(!npw.empty()&&(npw.back()=='\n'||npw.back()=='\r'))npw.pop_back();
+    SecureString pw=getPassword(argc,argv,"--password-file","Current wallet password: ");
+    Wallet w; if(!w.load(wfile,c.params().addrVersion,pw)){ pw.clear(); std::cout<<"decrypt failed (wrong password?)\n"; return 1; }
+    pw.clear();
+    char nbuf[1024]; size_t nn=0;
+    { std::ifstream in(npf,std::ios::binary); int c; while(nn<sizeof nbuf&&(c=in.get())!=EOF&&c!='\n'&&c!='\r'){ nbuf[nn++]=(char)c; } }
+    SecureString npw; npw.assign(nbuf,nn); OPENSSL_cleanse(nbuf,sizeof nbuf);
+    if(nn==0){ std::cout<<"cannot read new password file\n"; return 1; }
     if(npw.empty()){ std::cout<<"empty password refused\n"; return 1; }
-    bool ok=w.save(wfile,npw); cleanse(npw);
+    bool ok=w.save(wfile,npw); npw.clear();
     std::cout<<(ok?"password changed\n":"change failed\n"); return ok?0:1;
   }
-  std::string pw=getPassword(argc,argv,"--password-file","Wallet password: ");
+  SecureString pw=getPassword(argc,argv,"--password-file","Wallet password: ");
   Wallet w; if(!w.load(wfile,c.params().addrVersion,pw)){
     // Legacy plaintext loads without password; encrypted needs it.
     Wallet probe; bool legacy=false;
     { std::ifstream f(wfile,std::ios::binary); char mg[4]={0}; f.read(mg,4);
       legacy = !f.good() || memcmp(mg,"CONW",4)!=0; }
-    cleanse(pw);
+    pw.clear();
     if(legacy){ std::cout<<"wallet is plaintext legacy: run 'encrypt' first\n"; }
     else std::cout<<"decrypt failed (wrong password or corrupt wallet)\n";
     return 1;
@@ -112,6 +120,6 @@ int main(int argc,char**argv){
     }
   }
   else{ std::cout<<"unknown cmd\n"; rc=1; }
-  cleanse(pw);
+  pw.clear();
   return rc;
 }

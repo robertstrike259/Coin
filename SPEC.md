@@ -45,4 +45,10 @@
   Legacy v1 plaintext wallets load read-only for one-time migration via
   `coin-wallet encrypt` (use `changepass` with `--new-password-file` to rotate).
   Backups: copy the encrypted file; losing the passphrase loses the funds.
+- Key hygiene in memory: private keys live in a hardened container that
+  cleanses bytes on destroy/clear/erase/move, mlocks pages against swap
+  (best effort) and excludes them from core dumps where supported; signing
+  takes const references so keys are never copied to sign. Passphrases use a
+  heap-only move-only buffer (no std::string SSO copies) cleansed after use.
+  Note: libsecp256k1/OpenSSL may transiently copy secrets on their own stacks.
 - Coinbase maturity 100 blocks is NOT yet consensus-enforced in v0.1 (roadmap); max block 2MB.

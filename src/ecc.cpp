@@ -1,7 +1,42 @@
 #include "ecc.h"
 #include "platform.h"
 #include <secp256k1.h>
+#include <openssl/crypto.h>
 #include <mutex>
+#include <cstring>
+SecKey::SecKey() {
+  d.fill(0);
+  plt::lock_memory(d.data(), d.size());
+}
+SecKey::~SecKey() {
+  OPENSSL_cleanse(d.data(), d.size());
+  plt::unlock_memory(d.data(), d.size());
+}
+SecKey::SecKey(const SecKey& o) : d(o.d) { plt::lock_memory(d.data(), d.size()); }
+SecKey& SecKey::operator=(const SecKey& o) {
+  if (this != &o) {
+    OPENSSL_cleanse(d.data(), d.size());
+    d = o.d;
+  }
+  return *this;
+}
+SecKey::SecKey(SecKey&& o) noexcept : d(o.d) {
+  plt::lock_memory(d.data(), d.size());
+  OPENSSL_cleanse(o.d.data(), o.d.size());
+}
+SecKey& SecKey::operator=(SecKey&& o) noexcept {
+  if (this != &o) {
+    OPENSSL_cleanse(d.data(), d.size());
+    d = o.d;
+    OPENSSL_cleanse(o.d.data(), o.d.size());
+  }
+  return *this;
+}
+void SecKey::clear() { OPENSSL_cleanse(d.data(), d.size()); d.fill(0); }
+void SecKey::assign(const uint8_t in[32]) {
+  OPENSSL_cleanse(d.data(), d.size());
+  memcpy(d.data(), in, 32);
+}
 namespace {
 secp256k1_context* ctx() {
   static secp256k1_context* c = nullptr;

@@ -21,7 +21,7 @@ void put32(std::vector<uint8_t>& v, uint32_t x) {
 }
 uint32_t get32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
 
-bool deriveKey(const std::string& password, const uint8_t* salt, uint8_t* key, uint32_t mKib, uint32_t passes) {
+bool deriveKey(const SecureString& password, const uint8_t* salt, uint8_t* key, uint32_t mKib, uint32_t passes) {
   if (password.empty()) return false;
   return argon2id_hash_raw(passes, mKib, LANES, password.data(), password.size(), salt, SALT_LEN, key,
                            KEY_LEN) == ARGON2_OK;
@@ -106,7 +106,7 @@ bool parseBody(const std::vector<uint8_t>& body, std::map<std::string, SecKey>& 
 }
 }  // namespace
 
-bool walletEncryptBody(const std::vector<uint8_t>& plain, const std::string& password,
+bool walletEncryptBody(const std::vector<uint8_t>& plain, const SecureString& password,
                        std::vector<uint8_t>& fileBytes) {
   if (plain.size() > 16 * 1024 * 1024) return false;
   uint8_t salt[SALT_LEN], nonce[NONCE_LEN], key[KEY_LEN], tag[TAG_LEN];
@@ -133,7 +133,7 @@ bool walletEncryptBody(const std::vector<uint8_t>& plain, const std::string& pas
   return true;
 }
 
-bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const std::string& password,
+bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const SecureString& password,
                        std::vector<uint8_t>& plain, std::string& why) {
   constexpr size_t HDRLEN = 4 + 1 + 4 + 4 + 4 + SALT_LEN + NONCE_LEN + 4;
   if (fileBytes.size() < HDRLEN + TAG_LEN) { why = "truncated"; return false; }
@@ -172,9 +172,12 @@ bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const std::string&
   return true;
 }
 
-bool Wallet::load(const std::string& file, uint8_t ver) { return load(file, ver, ""); }
+bool Wallet::load(const std::string& file, uint8_t ver) {
+  SecureString empty;
+  return load(file, ver, empty);
+}
 
-bool Wallet::load(const std::string& file, uint8_t ver, const std::string& password) {
+bool Wallet::load(const std::string& file, uint8_t ver, const SecureString& password) {
   path = file;
   addrVersion = ver;
   keys.clear();
@@ -198,7 +201,7 @@ bool Wallet::load(const std::string& file, uint8_t ver, const std::string& passw
   return true;
 }
 
-bool Wallet::save(const std::string& file, const std::string& password) const {
+bool Wallet::save(const std::string& file, const SecureString& password) const {
   std::string p = file.empty() ? path : file;
   if (p.empty() || password.empty()) return false; // never write plaintext
   std::vector<uint8_t> body = serializeBody(keys);

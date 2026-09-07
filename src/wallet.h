@@ -2,6 +2,7 @@
 #include "ecc.h"
 #include "core.h"
 #include "validation.h"
+#include "secure.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -28,18 +29,18 @@ struct Wallet {
   // Load: auto-detects v2 (needs password) vs legacy v1 plaintext (password
   // ignored, encrypted stays false). Returns false on parse/auth failure.
   bool load(const std::string& file,uint8_t ver);
-  bool load(const std::string& file,uint8_t ver,const std::string& password);
+  bool load(const std::string& file,uint8_t ver,const SecureString& password);
   // Save: encrypted v2 only; empty password fails (no more plaintext writes).
   // No passwordless overload on purpose: every write must be encrypted.
-  bool save(const std::string& file,const std::string& password) const;
+  bool save(const std::string& file,const SecureString& password) const;
   std::string newKey();
   bool has(const std::string& addr) const;
   std::vector<std::string> addresses() const;
 };
 // Low-level helpers (tested directly): encrypt/decrypt the v1 body.
-bool walletEncryptBody(const std::vector<uint8_t>& plain, const std::string& password,
+bool walletEncryptBody(const std::vector<uint8_t>& plain, const SecureString& password,
                        std::vector<uint8_t>& fileBytes);
-bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const std::string& password,
+bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const SecureString& password,
                        std::vector<uint8_t>& plain, std::string& why);
 Transaction buildSpend(const Wallet& w, const std::map<OutPoint,Coin>& utxo,
   const std::string& from, const std::string& to, CAmount amount, CAmount fee, uint8_t ver, std::string& why);
