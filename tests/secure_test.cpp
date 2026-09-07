@@ -3,6 +3,8 @@
 #include "ecc.h"
 #include "secure.h"
 #include <cstring>
+#include <cstdlib>
+#include <string>
 #include <map>
 
 TEST_CASE("SecKey destructor cleanses its bytes") {
@@ -87,8 +89,17 @@ TEST_CASE("SecureString: no copies, clear cleanses, move transfers") {
 }
 
 TEST_CASE("secp256k1 context failure fails safe, never crashes") {
-  // test seam: force allocation-failure path
-  REQUIRE(setenv("COIN_ECC_FAIL_INIT", "1", 1) == 0);
+  // test seam: force allocation-failure path (portable set/unset)
+  auto setFail = [](const char* v) {
+#ifdef _WIN32
+    std::string kv = std::string("COIN_ECC_FAIL_INIT=") + v;
+    REQUIRE(_putenv(kv.c_str()) == 0);
+#else
+    if (v[0]) REQUIRE(setenv("COIN_ECC_FAIL_INIT", v, 1) == 0);
+    else REQUIRE(unsetenv("COIN_ECC_FAIL_INIT") == 0);
+#endif
+  };
+  setFail("1");
   std::string why;
   CHECK(!ecc_init(why));
   CHECK(!why.empty());
@@ -105,7 +116,7 @@ TEST_CASE("secp256k1 context failure fails safe, never crashes") {
   for (auto x : g.d) iszero = iszero && (x == 0);
   CHECK(iszero); // documented invalid-Key sentinel
   CHECK(!ecc_pubkey(g, pk));
-  REQUIRE(unsetenv("COIN_ECC_FAIL_INIT") == 0);
+  setFail("");
   // normal operation resumes afterwards
   CHECK(ecc_init(why));
   SecKey ok = ecc_generate();

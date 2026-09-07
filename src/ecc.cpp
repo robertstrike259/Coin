@@ -40,7 +40,9 @@ void SecKey::assign(const uint8_t in[32]) {
 namespace {
 secp256k1_context* ctx() {
   // Test seam (documented, test-only): forces allocation-failure paths.
-  if (std::getenv("COIN_ECC_FAIL_INIT")) return nullptr;
+  // Active only for the exact value "1" so mere presence never trips it.
+  const char* e = std::getenv("COIN_ECC_FAIL_INIT");
+  if (e && e[0] == '1' && e[1] == '\0') return nullptr;
   static secp256k1_context* c = nullptr;
   static std::once_flag f;
   std::call_once(f, [] { c = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY); });
