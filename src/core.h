@@ -14,7 +14,10 @@ struct Transaction {
   std::vector<uint8_t> serialize() const;
   static Transaction deserialize(const std::vector<uint8_t>& v);
   uint256 txid() const;
-  std::vector<uint8_t> sighash() const; // SHA256d digest to sign (all inputs, SIGHASH_ALL simplified)
+  // Per-input SIGHASH_ALL: digest commits to the whole tx with every
+  // scriptSig cleared except input idx, which carries the spent output's
+  // pubKeyHash (the script being satisfied). Each input signs its own digest.
+  std::vector<uint8_t> sighashForInput(size_t idx, const std::vector<uint8_t>& prevPkh) const;
   bool isCoinbase() const { return vin.size()==1 && vin[0].prevTx.isZero(); }
 };
 struct BlockHeader {

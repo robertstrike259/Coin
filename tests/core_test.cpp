@@ -99,7 +99,12 @@ TEST_CASE("transaction serialize roundtrip + txid stability + sighash") {
   CHECK(!t.isCoinbase());
   Transaction cb; cb.vin.resize(1);
   CHECK(cb.isCoinbase());
-  CHECK(t.sighash().size() == 32);
+  // per-input sighash: 32 bytes, bound to index and script
+  std::vector<uint8_t> sA(20, 1), sB(20, 2);
+  CHECK(t.sighashForInput(0, sA).size() == 32);
+  CHECK(t.sighashForInput(0, sA) != t.sighashForInput(0, sB));
+  // out-of-range index signs the cleared tx (never equal to a bound digest)
+  CHECK(t.sighashForInput(7, sA) != t.sighashForInput(0, sA));
 }
 
 TEST_CASE("merkle root: single, pair, odd-duplication") {

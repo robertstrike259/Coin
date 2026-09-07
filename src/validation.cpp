@@ -4,19 +4,18 @@ bool checkTx(const Transaction& t,std::string& why){
   if(t.vin.empty()||t.vout.empty()){why="empty";return false;}
   CAmount o=0; for(auto&x:t.vout){ if(!moneyRange(x.value)){why="value";return false;} o+=x.value; if(!moneyRange(o)){why="overflow";return false;} if(!t.isCoinbase()&&x.pubKeyHash.size()!=20){why="pkh";return false;} }
   if(t.isCoinbase()){ if(t.vin[0].scriptSig.size()>100){why="cb-size";return false;} return true; }
-  auto h=t.sighash(); std::vector<uint8_t> hh(h.begin(),h.end());
+  // Structural only: 64B sig + 33B compressed pubkey per input. Signature
+  // VALIDITY needs the spent scripts, so it is checked in checkInputs().
   for(auto&i:t.vin){ if(i.scriptSig.size()!=97){why="sigsize";return false;}
-    std::array<uint8_t,64> sig; memcpy(sig.data(),i.scriptSig.data(),64);
-    PubKey pk; memcpy(pk.d.data(),i.scriptSig.data()+64,33);
-    if(pk.d[0]!=0x02&&pk.d[0]!=0x03){why="badpubkey";return false;}
-    if(!ecc_verify(pk,hh,sig)){why="badsig";return false;} }
+    uint8_t prefix=i.scriptSig[64];
+    if(prefix!=0x02&&prefix!=0x03){why="badpubkey";return false;} }
   return true;
 }
 bool checkInputs(const Transaction& t,const std::map<OutPoint,Coin>& view,std::string& why){
   if(t.isCoinbase()){why="coinbase";return false;}
   std::set<std::pair<std::string,uint32_t>> seen;
-  auto h=t.sighash(); std::vector<uint8_t> hh(h.begin(),h.end());
-  for(auto&i:t.vin){
+  for(size_t k=0;k<t.vin.size();++k){
+    auto& i=t.vin[k];
     OutPoint o{i.prevTx,i.prevOut};
     auto key=std::make_pair(i.prevTx.hex(),i.prevOut);
     if(!seen.insert(key).second){why="dup-input";return false;}
@@ -27,6 +26,9 @@ bool checkInputs(const Transaction& t,const std::map<OutPoint,Coin>& view,std::s
     if(pk.d[0]!=0x02&&pk.d[0]!=0x03){why="badpubkey";return false;}
     // AUTHORIZATION: signer must own the output being spent
     if(hash160_pubkey({pk.d.begin(),pk.d.end()})!=it->second.pkh){why="pkh-mismatch";return false;}
+    // Each input is verified against its OWN sighash (bound to its index
+    // and script), so signatures are not replayable across inputs.
+    auto h=t.sighashForInput(k,it->second.pkh); std::vector<uint8_t> hh(h.begin(),h.end());
     if(!ecc_verify(pk,hh,sig)){why="badsig";return false;}
   }
   return true;

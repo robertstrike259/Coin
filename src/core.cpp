@@ -17,9 +17,9 @@ Transaction Transaction::deserialize(const std::vector<uint8_t>& v){
   t.locktime=r.u32(); return t;
 }
 uint256 Transaction::txid() const { return sha256d(serialize()); }
-std::vector<uint8_t> Transaction::sighash() const {
-  // Simplified SIGHASH_ALL: serialize with scriptSigs cleared
+std::vector<uint8_t> Transaction::sighashForInput(size_t idx, const std::vector<uint8_t>& prevPkh) const {
   Transaction c=*this; for(auto&i:c.vin) i.scriptSig.clear();
+  if(idx<c.vin.size()) c.vin[idx].scriptSig=prevPkh;
   auto s=c.serialize(); auto h=sha256_single(s); return sha256_single(h);
 }
 std::vector<uint8_t> BlockHeader::serialize() const {

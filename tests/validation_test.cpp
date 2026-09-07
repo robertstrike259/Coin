@@ -5,6 +5,7 @@
 #include "hash.h"
 #include "pow.h"
 #include <cstring>
+#include <stdexcept>
 
 // Build a funded view + valid spend, then mutate.
 struct Fixture {
@@ -27,14 +28,25 @@ struct Fixture {
     t.vout = {{out, to}};
     CAmount change = 10 * SWARF_PER_COIN - out - fee;
     if (change > 0) t.vout.push_back({change, pkh});
-    auto h = t.sighash();
+    auto h = t.sighashForInput(0, pkh);
     std::vector<uint8_t> hh(h.begin(), h.end());
     std::array<uint8_t, 64> sig;
     CHECK(ecc_sign(sk, hh, sig));
     std::vector<uint8_t> ss(sig.begin(), sig.end());
     ss.insert(ss.end(), pk.d.begin(), pk.d.end());
-    for (auto& i : t.vin) i.scriptSig = ss;
+    t.vin[0].scriptSig = ss;
     return t;
+  }
+  // Sign input idx of an arbitrary tx with the fixture key (for mutation tests).
+  static void signAs(Transaction& t, size_t idx, const SecKey& sk, const PubKey& pk,
+                     const std::vector<uint8_t>& script) {
+    auto h = t.sighashForInput(idx, script);
+    std::vector<uint8_t> hh(h.begin(), h.end());
+    std::array<uint8_t, 64> sig;
+    if (!ecc_sign(sk, hh, sig)) throw std::runtime_error("sign failed");
+    std::vector<uint8_t> ss(sig.begin(), sig.end());
+    ss.insert(ss.end(), pk.d.begin(), pk.d.end());
+    t.vin[idx].scriptSig = ss;
   }
 };
 
@@ -50,7 +62,9 @@ TEST_CASE("tx mutations rejected") {
   Fixture f;
   std::string why;
   auto good = f.spend(3 * SWARF_PER_COIN, 1000);
-  { auto t = good; t.vin[0].scriptSig[0] ^= 1; CHECK(!checkTx(t, why)); }          // bad sig
+  CHECK(checkInputs(good, f.view, why)); // signed input verifies contextually
+  { auto t = good; t.vin[0].scriptSig[0] ^= 1; CHECK(!checkInputs(t, f.view, why)); CHECK(why == "badsig"); }
+  { auto t = good; t.vin[0].scriptSig[10] ^= 1; CHECK(checkTx(t, why)); } // structural only: sig bytes unchecked here
   { auto t = good; t.vout[0].value = 100 * SWARF_PER_COIN; CHECK(txFee(t, f.view) < 0); }
   { Transaction t; CHECK(!checkTx(t, why)); }                                     // empty
   { auto t = good; t.vout[0].pubKeyHash = {1, 2}; CHECK(!checkTx(t, why)); }      // bad pkh size
@@ -88,22 +102,39 @@ TEST_CASE("checkInputs: dup inputs, missing, pkh mismatch") {
   std::string why;
   auto good = f.spend(3 * SWARF_PER_COIN, 1000);
   CHECK(checkInputs(good, f.view, why));
-  { auto t = good; t.vin.push_back(t.vin[0]); // re-sign over the duplicated set
-    auto h = t.sighash(); std::vector<uint8_t> hh(h.begin(), h.end());
-    std::array<uint8_t, 64> sig; REQUIRE(ecc_sign(f.sk, hh, sig));
-    std::vector<uint8_t> ss(sig.begin(), sig.end());
-    ss.insert(ss.end(), f.pk.d.begin(), f.pk.d.end());
-    for (auto& i : t.vin) i.scriptSig = ss;
+  { auto t = good; t.vin.push_back(t.vin[0]); // re-sign EACH input on its own digest
+    Fixture::signAs(t, 0, f.sk, f.pk, f.pkh);
+    Fixture::signAs(t, 1, f.sk, f.pk, f.pkh);
     CHECK(!checkInputs(t, f.view, why)); CHECK(why == "dup-input"); }
   { auto t = good; t.vin[0].prevOut = 99; CHECK(!checkInputs(t, f.view, why)); CHECK(why == "missing-input"); }
   { // wrong key signs: signature valid but pkh mismatch
     SecKey other = ecc_generate();
     PubKey opk; REQUIRE(ecc_pubkey(other, opk));
     auto t = good;
-    auto h = t.sighash(); std::vector<uint8_t> hh(h.begin(), h.end());
+    auto h = t.sighashForInput(0, f.pkh); std::vector<uint8_t> hh(h.begin(), h.end());
     std::array<uint8_t, 64> sig; REQUIRE(ecc_sign(other, hh, sig));
     std::vector<uint8_t> ss(sig.begin(), sig.end());
     ss.insert(ss.end(), opk.d.begin(), opk.d.end());
     t.vin[0].scriptSig = ss;
     CHECK(!checkInputs(t, f.view, why)); CHECK(why == "pkh-mismatch"); }
+}
+
+TEST_CASE("signatures do not replay across inputs") {
+  Fixture f;
+  std::string why;
+  // two inputs spending two outputs of the same key
+  f.view[{f.fundTx, 1}] = {4 * SWARF_PER_COIN, f.pkh, 1, false};
+  Transaction t;
+  TxIn a; a.prevTx = f.fundTx; a.prevOut = 0;
+  TxIn b; b.prevTx = f.fundTx; b.prevOut = 1;
+  t.vin = {a, b};
+  t.vout = {{13 * SWARF_PER_COIN, f.pkh}};
+  Fixture::signAs(t, 0, f.sk, f.pk, f.pkh);
+  Fixture::signAs(t, 1, f.sk, f.pk, f.pkh);
+  CHECK(checkInputs(t, f.view, why));
+  // swap the two scriptSigs: each sig is now on the wrong index -> reject
+  auto evil = t;
+  std::swap(evil.vin[0].scriptSig, evil.vin[1].scriptSig);
+  CHECK(!checkInputs(evil, f.view, why));
+  CHECK(why == "badsig");
 }

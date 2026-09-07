@@ -178,7 +178,7 @@ TEST_CASE("unauthorized spend rejected at connect (pkh mismatch)") {
   Transaction evil;
   TxIn in; in.prevTx = target.tx; in.prevOut = target.n;
   evil.vin = {in}; evil.vout = {{SWARF_PER_COIN, vh}};
-  auto h = evil.sighash(); std::vector<uint8_t> hh(h.begin(), h.end());
+  auto h = evil.sighashForInput(0, vh); std::vector<uint8_t> hh(h.begin(), h.end());
   PubKey tpk; REQUIRE(ecc_pubkey(thief.keys.begin()->second, tpk));
   std::array<uint8_t, 64> sig; REQUIRE(ecc_sign(thief.keys.begin()->second, hh, sig));
   std::vector<uint8_t> ss(sig.begin(), sig.end());

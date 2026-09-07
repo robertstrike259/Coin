@@ -24,10 +24,14 @@
 - Address: Base58Check(version 0x1C + hash160(compressed pubkey) + checksum).
   hash160 = RIPEMD160(SHA256(pubkey)) (OpenSSL).
 - Sig: ECDSA secp256k1 via libsecp256k1 (deterministic RFC6979, low-S),
-  sighash = SHA256d(tx digest), compact (r||s 64B) + pubkey 33B in scriptSig.
-  Authorization is consensus-enforced: the signer's hash160 must equal the
-  spent output's pubKeyHash (pkh-mismatch rejects), and duplicate inputs
-  within one tx are rejected.
+  compact (r||s 64B) + pubkey 33B in scriptSig. Sighash is per input
+  (SIGHASH_ALL): the digest for input k commits to the whole tx with every
+  scriptSig cleared except k, which carries the spent output's pubKeyHash.
+  Each input is verified against its own digest, so signatures do not replay
+  across inputs. Authorization is consensus-enforced: the signer's hash160
+  must equal the spent output's pubKeyHash (pkh-mismatch rejects), and
+  duplicate inputs within one tx are rejected. Context-free checks cover
+  shapes only; signature validity needs UTXO context.
 - Fees: swarf/byte, minrelay 100 swarf/tx (mempool), dust 1000 swarf
   (wallet folds sub-dust change into the fee). Mempool tracks spent outpoints
   (no unconfirmed chains or mempool double-spends in v0.1) and revalidates on

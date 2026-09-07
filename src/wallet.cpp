@@ -264,15 +264,26 @@ Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, co
   std::vector<uint8_t> th;
   if (!addressToHash(to, tv, th)) { why = "bad-to"; return {}; }
   (void)ver;
-  auto it = w.keys.find(from);
-  if (it == w.keys.end()) { why = "no-key"; return {}; }
-  PubKey pk;
-  if (!ecc_pubkey(it->second, pk)) { why = "no-key"; return {}; }
-  auto fh = hash160_pubkey({pk.d.begin(), pk.d.end()});
+  if (w.keys.find(from) == w.keys.end()) { why = "no-key"; return {}; }
+  // Change goes back to the sender's script.
+  PubKey fromPk;
+  if (!ecc_pubkey(w.keys.find(from)->second, fromPk)) { why = "no-key"; return {}; }
+  auto fh = hash160_pubkey({fromPk.d.begin(), fromPk.d.end()});
+  // Index owned keys by script so selection AND signing span every address
+  // of this wallet (a spend may combine outputs of several keys).
+  std::map<std::vector<uint8_t>, PubKey> ownedPk;
+  std::map<std::vector<uint8_t>, const SecKey*> ownedKey;
+  for (auto& kv : w.keys) {
+    PubKey cand;
+    if (!ecc_pubkey(kv.second, cand)) continue;
+    auto h = hash160_pubkey({cand.d.begin(), cand.d.end()});
+    ownedPk[h] = cand;
+    ownedKey[h] = &kv.second;
+  }
   Transaction t;
   CAmount in = 0;
   for (auto& kv : utxo) {
-    if (kv.second.pkh == fh) {
+    if (ownedKey.count(kv.second.pkh)) {
       TxIn i;
       i.prevTx = kv.first.tx;
       i.prevOut = kv.first.n;
@@ -286,12 +297,24 @@ Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, co
   t.vout.push_back(o1);
   CAmount change = in - amount - fee;
   if (change >= DUST) t.vout.push_back({change, fh}); // else: dust folds into fee
-  auto h = t.sighash();
-  std::vector<uint8_t> hh(h.begin(), h.end());
-  std::array<uint8_t, 64> sig;
-  if (!ecc_sign(it->second, hh, sig)) { why = "sign"; return {}; }
-  std::vector<uint8_t> ss(sig.begin(), sig.end());
-  ss.insert(ss.end(), pk.d.begin(), pk.d.end());
-  for (auto& i : t.vin) i.scriptSig = ss;
+  // Sign EACH input individually: the digest for input k commits to k's index
+  // and the script being spent, using the key that owns that output (inputs
+  // may belong to different addresses of this wallet).
+  for (size_t k = 0; k < t.vin.size(); ++k) {
+    OutPoint o{t.vin[k].prevTx, t.vin[k].prevOut};
+    auto it2 = utxo.find(o);
+    if (it2 == utxo.end()) { why = "missing-input"; return {}; }
+    const std::vector<uint8_t>& needPkh = it2->second.pkh;
+    auto kit = ownedKey.find(needPkh);
+    auto pit = ownedPk.find(needPkh);
+    if (kit == ownedKey.end() || pit == ownedPk.end()) { why = "no-key"; return {}; }
+    auto h = t.sighashForInput(k, needPkh);
+    std::vector<uint8_t> hh(h.begin(), h.end());
+    std::array<uint8_t, 64> sig;
+    if (!ecc_sign(*kit->second, hh, sig)) { why = "sign"; return {}; }
+    std::vector<uint8_t> ss(sig.begin(), sig.end());
+    ss.insert(ss.end(), pit->second.d.begin(), pit->second.d.end());
+    t.vin[k].scriptSig = std::move(ss);
+  }
   return t;
 }
