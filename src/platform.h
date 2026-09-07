@@ -15,6 +15,14 @@
 #include <openssl/rand.h>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+// windows.h min/max macros would hijack std::min/std::max.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h> // VirtualLock/VirtualUnlock (memory locking only)
 #include <process.h>
 #ifdef _MSC_VER
 #include <intrin.h>
