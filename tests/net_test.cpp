@@ -67,3 +67,29 @@ TEST_CASE("p2p loopback: two nodes connect, headers sync") {
   CHECK(a.tipHash() == b.tipHash());  // same deterministic regtest genesis
   na.halt(); nb.halt();
 }
+
+#ifndef _WIN32
+#include <sys/socket.h>
+TEST_CASE("transport loops: fragmented 1MB roundtrip, close, empty") {
+  int sv[2];
+  REQUIRE(::socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
+  // tiny buffers force heavy fragmentation: many partial send/recv iterations
+  int small = 4096;
+  REQUIRE(::setsockopt(sv[0], SOL_SOCKET, SO_SNDBUF, &small, sizeof small) == 0);
+  REQUIRE(::setsockopt(sv[1], SOL_SOCKET, SO_RCVBUF, &small, sizeof small) == 0);
+  std::vector<uint8_t> tx(1024 * 1024);
+  for (size_t i = 0; i < tx.size(); ++i) tx[i] = (uint8_t)(i * 31 + 7);
+  std::vector<uint8_t> rx(tx.size(), 0);
+  std::thread t([&] { CHECK(plt::send_all(sv[0], tx.data(), tx.size())); });
+  CHECK(plt::recv_all(sv[1], rx.data(), rx.size()));
+  t.join();
+  CHECK(rx == tx);
+  CHECK(plt::send_all(sv[0], nullptr, 0));
+  CHECK(plt::recv_all(sv[1], nullptr, 0));
+  // abrupt peer close surfaces as failure, never a hang
+  plt::close_socket(sv[0]);
+  uint8_t one = 0;
+  CHECK(!plt::recv_all(sv[1], &one, 1));
+  plt::close_socket(sv[1]);
+}
+#endif

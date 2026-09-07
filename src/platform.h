@@ -72,15 +72,29 @@ inline bool set_reuseaddr(socket_t s) {
   return ::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char*)&one, sizeof one) == 0;
 }
 
+// Blocking-socket contract: every socket created here stays in blocking mode,
+// so EAGAIN/EWOULDBLOCK cannot occur and is treated as failure. EINTR
+// (signal interruption) is retried transparently instead of surfacing as a
+// spurious disconnect. Lengths are capped by callers (P2P_MAX_MSG), so the
+// (int) casts below cannot truncate.
 inline bool send_all(socket_t s, const uint8_t* d, size_t n) {
   size_t o = 0;
   while (o < n) {
 #ifdef _WIN32
     int r = ::send(s, (const char*)d + o, (int)(n - o), 0);
+    if (r == SOCKET_ERROR) {
+      if (WSAGetLastError() == WSAEINTR) continue;
+      return false;
+    }
+    if (r == 0) return false; // pathological for len > 0: do not spin
 #else
     ssize_t r = ::send(s, d + o, n - o, 0);
+    if (r < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (r == 0) return false; // pathological for len > 0: do not spin
 #endif
-    if (r <= 0) return false;
     o += (size_t)r;
   }
   return true;
@@ -91,10 +105,19 @@ inline bool recv_all(socket_t s, uint8_t* d, size_t n) {
   while (o < n) {
 #ifdef _WIN32
     int r = ::recv(s, (char*)d + o, (int)(n - o), 0);
+    if (r == SOCKET_ERROR) {
+      if (WSAGetLastError() == WSAEINTR) continue;
+      return false;
+    }
+    if (r == 0) return false; // orderly shutdown
 #else
     ssize_t r = ::recv(s, d + o, n - o, 0);
+    if (r < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (r == 0) return false; // orderly shutdown
 #endif
-    if (r <= 0) return false;
     o += (size_t)r;
   }
   return true;
