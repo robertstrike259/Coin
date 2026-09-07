@@ -31,7 +31,8 @@
 - Fees: swarf/byte, minrelay 100 swarf/tx (mempool), dust 1000 swarf
   (wallet folds sub-dust change into the fee). Mempool tracks spent outpoints
   (no unconfirmed chains or mempool double-spends in v0.1) and revalidates on
-  every tip change.
+  every tip change. The mempool is in-memory only and does not survive restarts:
+  unconfirmed transactions must be rebroadcast.
 - P2P: 2 MiB message cap, headers-first IBD (2000/page), block/tx gossip
   relay, real peer counts in RPC.
 - Storage: atomic `blocks.dat` writes (`CON1` magic + checksum); corrupt files
