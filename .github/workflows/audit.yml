@@ -1,0 +1,16 @@
+name: dep-audit
+on:
+  schedule:
+    - cron: "0 6 * * 1" # weekly Monday 06:00 UTC
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Freshness audit (informational, never red)
+        shell: bash
+        run: python3 scripts/audit_deps.py | tee audit.md
+      - name: Publish summary
+        shell: bash
+        run: cat audit.md >> $GITHUB_STEP_SUMMARY

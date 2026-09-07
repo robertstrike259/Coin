@@ -14,8 +14,9 @@ established open-source libraries - no hand-rolled crypto:
 | GUI (optional) | Qt6 | LGPL |
 | Sockets | standalone Asio (BSL-1.0), dual-stack IPv4/IPv6 | - |
 
-`secp256k1`, `argon2`, `nlohmann/json`, `doctest` are fetched automatically
-by CMake FetchContent (pinned tags). OpenSSL comes from the OS:
+`secp256k1`, `argon2`, `nlohmann/json`, `doctest`, `asio` are fetched
+automatically by CMake FetchContent (pinned tags). OpenSSL comes from the OS.
+Exact pins, the CVE audit, and the upgrade policy live in DEPENDENCIES.md.
 
 ## Build
 ```
