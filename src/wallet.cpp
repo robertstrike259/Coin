@@ -283,13 +283,16 @@ Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, co
     ownedKey[h] = &kv.second;
   }
   Transaction t;
-  CAmount in = 0;
+  CAmount in = 0, immature = 0;
   // Oldest-first, skipping immature coinbases: the selected set must be
   // spendable at spendHeight or checkInputs (and consensus) will reject it.
   std::vector<std::pair<OutPoint, Coin>> cands;
   for (auto& kv : utxo) {
     if (!ownedKey.count(kv.second.pkh)) continue;
-    if (kv.second.coinbase && spendHeight - kv.second.height < COINBASE_MATURITY) continue;
+    if (kv.second.coinbase && spendHeight - kv.second.height < COINBASE_MATURITY) {
+      immature += kv.second.value;
+      continue;
+    }
     cands.push_back(kv);
   }
   std::sort(cands.begin(), cands.end(),
@@ -302,7 +305,10 @@ Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, co
     in += kv.second.value;
     if (in >= amount + fee) break;
   }
-  if (in < amount + fee) { why = "insufficient"; return {}; }
+  if (in < amount + fee) {
+    why = (in + immature >= amount + fee) ? "immature (coinbase outputs need 100 blocks)" : "insufficient";
+    return {};
+  }
   TxOut o1{amount, th};
   t.vout.push_back(o1);
   CAmount change = in - amount - fee;
