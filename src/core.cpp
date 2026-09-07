@@ -10,9 +10,10 @@ std::vector<uint8_t> Transaction::serialize() const {
   w.u32(locktime); return w.v;
 }
 Transaction Transaction::deserialize(const std::vector<uint8_t>& v){
-  SerReader r(v); Transaction t; t.version=(int32_t)r.u32(); auto ni=(size_t)r.varint();
-  for(size_t i=0;i<ni;++i){ TxIn in; auto b=r.bytes(32); memcpy(in.prevTx.d.data(),b.data(),32); in.prevOut=r.u32(); auto sl=(size_t)r.varint(); in.scriptSig=r.bytes(sl); in.seq=r.u32(); t.vin.push_back(std::move(in)); }
-  auto no=(size_t)r.varint(); for(size_t i=0;i<no;++i){ TxOut o; o.value=r.i64(); auto sl=(size_t)r.varint(); o.pubKeyHash=r.bytes(sl); t.vout.push_back(std::move(o)); }
+  if(v.size()>MAX_TX_BYTES) throw std::runtime_error("deserialize: tx too large");
+  SerReader r(v); Transaction t; t.version=(int32_t)r.u32(); auto ni=(size_t)r.varintBounded(MAX_TX_INPUTS);
+  for(size_t i=0;i<ni;++i){ TxIn in; auto b=r.bytes(32); memcpy(in.prevTx.d.data(),b.data(),32); in.prevOut=r.u32(); auto sl=(size_t)r.varintBounded(MAX_SCRIPT_SIZE); in.scriptSig=r.bytes(sl); in.seq=r.u32(); t.vin.push_back(std::move(in)); }
+  auto no=(size_t)r.varintBounded(MAX_TX_OUTPUTS); for(size_t i=0;i<no;++i){ TxOut o; o.value=r.i64(); auto sl=(size_t)r.varintBounded(MAX_SCRIPT_SIZE); o.pubKeyHash=r.bytes(sl); t.vout.push_back(std::move(o)); }
   t.locktime=r.u32(); return t;
 }
 uint256 Transaction::txid() const { return sha256d(serialize()); }
@@ -37,8 +38,9 @@ std::vector<uint8_t> Block::serialize() const {
   for(auto&t:txs){ auto s=t.serialize(); w.varint(s.size()); w.bytes(s); } return w.v;
 }
 Block Block::deserialize(const std::vector<uint8_t>& v){
-  SerReader r(v); Block b; b.header=BlockHeader::deserialize(r); auto n=(size_t)r.varint();
-  for(size_t i=0;i<n;++i){ auto l=(size_t)r.varint(); auto tb=r.bytes(l); b.txs.push_back(Transaction::deserialize(tb)); } return b;
+  if(v.size()>MAX_BLOCK_BYTES) throw std::runtime_error("deserialize: block too large");
+  SerReader r(v); Block b; b.header=BlockHeader::deserialize(r); auto n=(size_t)r.varintBounded(MAX_TXS_PER_BLOCK);
+  for(size_t i=0;i<n;++i){ auto l=(size_t)r.varintBounded(MAX_TX_BYTES); auto tb=r.bytes(l); b.txs.push_back(Transaction::deserialize(tb)); } return b;
 }
 uint256 merkleRoot(const std::vector<Transaction>& txs){
   if(txs.empty()) return uint256();

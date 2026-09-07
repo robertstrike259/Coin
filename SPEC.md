@@ -37,6 +37,10 @@
   relay, real peer counts in RPC.
 - Storage: atomic `blocks.dat` writes (`CON1` magic + checksum); corrupt files
   are archived to `.corrupt`, never silently wiped.
+- DoS bounds: every length prefix is validated before allocation (tx/block
+  counts, script sizes, wallet key counts capped; wallet files capped at 32MB,
+  RPC hex payloads capped, P2P messages capped at block size). Malformed data
+  fails fast with an error string, never hangs or over-allocates.
 - Wallet: `wallet.dat` is AES-256-GCM encrypted (OpenSSL EVP) under a key
   derived by Argon2id (64 MiB, 3 passes, 1 lane) from the user passphrase.
   File layout: `CONW` magic, version, KDF params, 16-byte salt, 12-byte nonce,

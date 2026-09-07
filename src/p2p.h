@@ -22,5 +22,5 @@ struct P2P {
   size_t peerCount() const { return npeers; }
   std::atomic<size_t> npeers{0};
 };
-static constexpr uint32_t P2P_MAX_MSG = 2*1024*1024 + 1024; // max block + header slack
+static constexpr uint32_t P2P_MAX_MSG = 2*1024*1024 + 1024; // == MAX_BLOCK_BYTES; kept local so p2p.h needs no other deps
 std::vector<uint8_t> p2pMsg(const ChainParams& p,const std::string& cmd,const std::vector<uint8_t>& payload);

@@ -36,7 +36,9 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
   if(method=="submitblock"){
     if(!params.contains("hex")) return "{\"error\":\"no hex\"}";
     try{
-      Block blk=Block::deserialize(unhex(params["hex"].get<std::string>()));
+      std::string hex=params["hex"].get<std::string>();
+      if(hex.size()>MAX_RPC_HEX){ json j; j["error"]="too-large"; return j.dump(); }
+      Block blk=Block::deserialize(unhex(hex));
       std::string why; bool conn=false;
       if(!chain.acceptBlock(blk,why,conn)){ json j; j["error"]=why; return j.dump(); }
       chain.save();
@@ -51,7 +53,9 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
   if(method=="sendrawtransaction"){
     if(!params.contains("hex")) return "{\"error\":\"no hex\"}";
     try{
-      auto tx=Transaction::deserialize(unhex(params["hex"].get<std::string>()));
+      std::string hex=params["hex"].get<std::string>();
+      if(hex.size()>MAX_RPC_HEX){ json j; j["error"]="too-large"; return j.dump(); }
+      auto tx=Transaction::deserialize(unhex(hex));
       std::string why; std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v);
       if(!pool.add(tx,v,why)){ json j; j["error"]=why; return j.dump(); }
       if(self.onTxAccepted) self.onTxAccepted(tx);

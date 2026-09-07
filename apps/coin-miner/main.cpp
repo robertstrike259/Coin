@@ -35,7 +35,9 @@ int main(int argc,char**argv){
     try { tj=nlohmann::json::parse(rpcCall(rpcport,"getblocktemplate","{}")); }
     catch(...){ std::cout<<"no template (bad rpc)\n"; continue; }
     if(!tj.contains("template_hex")){ std::cout<<"no template: "<<tj.dump()<<"\n"; continue; }
-    Block t=Block::deserialize(unhex(tj["template_hex"].get<std::string>()));
+    Block t;
+    try { t=Block::deserialize(unhex(tj["template_hex"].get<std::string>())); }
+    catch(std::exception& e){ std::cout<<"bad template: "<<e.what()<<"\n"; continue; }
     // set mining payout if --address given: rebuild coinbase
     if(!addr.empty()){ uint8_t v; std::vector<uint8_t> h; if(addressToHash(addr,v,h)){ t.txs[0].vout[0].pubKeyHash=h; } }
     // extraNonce: random suffix guarantees unique coinbase even across miners on same template.

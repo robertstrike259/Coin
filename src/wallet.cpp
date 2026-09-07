@@ -85,22 +85,24 @@ std::vector<uint8_t> serializeBody(const std::map<std::string, SecKey>& keys) {
   return w.v;
 }
 
-bool parseBody(const std::vector<uint8_t>& body, std::map<std::string, SecKey>& keys) {
+bool parseBody(const std::vector<uint8_t>& body, std::map<std::string, SecKey>& keys, std::string& why) {
   try {
     SerReader r(body);
-    auto n = (size_t)r.varint();
-    if (n > 100000) return false;
+    auto n = (size_t)r.varintBounded(MAX_WALLET_KEYS);
     for (size_t i = 0; i < n; ++i) {
-      auto a = r.str();
-      if (a.size() > 128) return false;
-      auto skb = r.bytes(32);
+      auto a = r.strBounded(MAX_ADDR_LEN);
+      auto skb = r.bytes(32); // fixed size: need() throws if truncated
       SecKey k;
       memcpy(k.d.data(), skb.data(), 32);
       keys[a] = k;
     }
-    if (!r.eof()) return false;
+    if (!r.eof()) { why = "trailing-bytes"; return false; }
     return true;
+  } catch (const std::runtime_error& e) {
+    why = e.what(); // "deserialize: truncated" / "oversize count" / etc.
+    return false;
   } catch (...) {
+    why = "parse-fail";
     return false;
   }
 }
@@ -184,20 +186,27 @@ bool Wallet::load(const std::string& file, uint8_t ver, const SecureString& pass
   encrypted = false;
   std::ifstream f(file, std::ios::binary);
   if (!f.good()) return true; // no wallet yet
+  try { // bound the read itself: a huge file must fail before allocation
+    std::error_code ec;
+    auto sz = std::filesystem::file_size(file, ec);
+    if (!ec && sz > MAX_WALLET_FILE) return false;
+  } catch (...) { return false; }
   std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), {});
+  if (d.size() > MAX_WALLET_FILE) return false;
   if (d.size() >= 4 && memcmp(d.data(), "CONW", 4) == 0) {
     if (password.empty()) return false; // encrypted: password mandatory
     std::vector<uint8_t> body;
     std::string why;
     if (!walletDecryptBody(d, password, body, why)) return false;
-    bool ok = parseBody(body, keys);
+    bool ok = parseBody(body, keys, why);
     OPENSSL_cleanse(body.data(), body.size());
     if (!ok) return false;
     encrypted = true;
     return true;
   }
   // Legacy v1 plaintext: load for migration; callers must re-save encrypted.
-  if (!parseBody(d, keys)) return false;
+  std::string why;
+  if (!parseBody(d, keys, why)) return false;
   return true;
 }
 
