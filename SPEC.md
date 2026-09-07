@@ -60,4 +60,5 @@
   takes const references so keys are never copied to sign. Passphrases use a
   heap-only move-only buffer (no std::string SSO copies) cleansed after use.
   Note: libsecp256k1/OpenSSL may transiently copy secrets on their own stacks.
-- Coinbase maturity 100 blocks is NOT yet consensus-enforced in v0.1 (roadmap); max block 2MB.
+- Coinbase maturity 100 blocks is consensus-enforced on spends (mempool and
+  connect paths check spend height against output height); max block 2MB.

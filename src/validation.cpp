@@ -11,7 +11,7 @@ bool checkTx(const Transaction& t,std::string& why){
     if(prefix!=0x02&&prefix!=0x03){why="badpubkey";return false;} }
   return true;
 }
-bool checkInputs(const Transaction& t,const std::map<OutPoint,Coin>& view,std::string& why){
+bool checkInputs(const Transaction& t,const std::map<OutPoint,Coin>& view,int spendHeight,std::string& why){
   if(t.isCoinbase()){why="coinbase";return false;}
   std::set<std::pair<std::string,uint32_t>> seen;
   for(size_t k=0;k<t.vin.size();++k){
@@ -20,6 +20,7 @@ bool checkInputs(const Transaction& t,const std::map<OutPoint,Coin>& view,std::s
     auto key=std::make_pair(i.prevTx.hex(),i.prevOut);
     if(!seen.insert(key).second){why="dup-input";return false;}
     auto it=view.find(o); if(it==view.end()){why="missing-input";return false;}
+    if(it->second.coinbase && spendHeight-it->second.height<COINBASE_MATURITY){why="immature";return false;}
     if(i.scriptSig.size()!=97){why="sigsize";return false;}
     std::array<uint8_t,64> sig; memcpy(sig.data(),i.scriptSig.data(),64);
     PubKey pk; memcpy(pk.d.data(),i.scriptSig.data()+64,33);

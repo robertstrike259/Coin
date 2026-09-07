@@ -43,4 +43,5 @@ bool walletEncryptBody(const std::vector<uint8_t>& plain, const SecureString& pa
 bool walletDecryptBody(const std::vector<uint8_t>& fileBytes, const SecureString& password,
                        std::vector<uint8_t>& plain, std::string& why);
 Transaction buildSpend(const Wallet& w, const std::map<OutPoint,Coin>& utxo,
-  const std::string& from, const std::string& to, CAmount amount, CAmount fee, uint8_t ver, std::string& why);
+  const std::string& from, const std::string& to, CAmount amount, CAmount fee, uint8_t ver,
+  int spendHeight, std::string& why);

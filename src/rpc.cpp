@@ -44,7 +44,7 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
       chain.save();
       if(conn){ // only confirmed-tip txs leave the mempool; revalidate the rest
         pool.remove(blk.txs);
-        std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v);
+        std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v,chain.height()+1);
         if(self.onBlockAccepted) self.onBlockAccepted(blk);
       }
       json j; j["ok"]=true; j["connected"]=conn; return j.dump();
@@ -57,7 +57,7 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
       if(hex.size()>MAX_RPC_HEX){ json j; j["error"]="too-large"; return j.dump(); }
       auto tx=Transaction::deserialize(unhex(hex));
       std::string why; std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v);
-      if(!pool.add(tx,v,why)){ json j; j["error"]=why; return j.dump(); }
+      if(!pool.add(tx,v,chain.height()+1,why)){ json j; j["error"]=why; return j.dump(); }
       if(self.onTxAccepted) self.onTxAccepted(tx);
       json j; j["txid"]=tx.txid().hex(); return j.dump();
     }catch(std::exception& e){ json j; j["error"]=std::string("parse: ")+e.what(); return j.dump(); }
@@ -69,7 +69,7 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
     std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v);
     CAmount bal=0; json arr=json::array();
     for(auto&kv:v){ if(kv.second.pkh==h160){ bal+=kv.second.value;
-      if(method=="listunspent") arr.push_back({{"txid",kv.first.tx.hex()},{"vout",kv.first.n},{"value_swarf",kv.second.value},{"height",kv.second.height}}); } }
+      if(method=="listunspent") arr.push_back({{"txid",kv.first.tx.hex()},{"vout",kv.first.n},{"value_swarf",kv.second.value},{"height",kv.second.height},{"coinbase",kv.second.coinbase}}); } }
     if(method=="listunspent"){ json j; j["unspent"]=arr; return j.dump(); }
     json j; j["balance_swarf"]=bal; return j.dump();
   }

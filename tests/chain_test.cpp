@@ -32,25 +32,26 @@ TEST_CASE("mine + connect blocks, fees accrue to coinbase") {
   Wallet w; std::string addr = w.newKey();
   uint8_t vv; std::vector<uint8_t> h160;
   REQUIRE(addressToHash(addr, vv, h160));
-  // block 1 pays wallet
+  // block 1 pays wallet; coinbases mature after 100 blocks
   Block b1 = mineBlock(c, pool, h160);
   std::string why;
   REQUIRE(c.acceptBlock(b1, why));
-  CHECK(c.height() == 1);
-  // build a spend with fee, add to mempool
+  mineToHeight(c, pool, h160, 101);
+  CHECK(c.height() == 101);
+  // build a spend with fee, add to mempool (spends mature b1 coinbase at height 102)
   std::map<OutPoint, Coin> u; c.getUtxoSnapshot(u);
   std::string why2;
-  Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 5000, c.params.addrVersion, why2);
+  Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 5000, c.params.addrVersion, c.height() + 1, why2);
   REQUIRE(!sp.vin.empty());
-  CHECK(pool.add(sp, u, why2));
+  CHECK(pool.add(sp, u, c.height() + 1, why2));
   CHECK(pool.size() == 1);
-  // block 2 includes it; coinbase may claim reward+fee
+  // next block includes it; coinbase may claim reward+fee
   Block b2 = mineBlock(c, pool, h160);
   REQUIRE(b2.txs.size() == 2);
   REQUIRE(c.acceptBlock(b2, why));
   pool.remove(b2.txs);
   CHECK(pool.size() == 0);
-  CHECK(c.height() == 2);
+  CHECK(c.height() == 102);
 }
 
 TEST_CASE("consensus rejects: bad prev, bad bits, overspend, dup txid (BIP30)") {
@@ -84,12 +85,14 @@ TEST_CASE("mempool policy") {  Chain c(regtestParams(), tmpdir("pool"));
   REQUIRE(addressToHash(addr, vv, h160));
   std::string why;
   REQUIRE(c.acceptBlock(mineBlock(c, pool, h160), why));
+  mineToHeight(c, pool, h160, 101); // mature the coinbase before spending
   std::map<OutPoint, Coin> u; c.getUtxoSnapshot(u);
-  { Transaction cb; cb.vin.resize(1); CHECK(!pool.add(cb, u, why)); }  // coinbase rejected
-  { std::string w2; Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 1, c.params.addrVersion, w2);
-    REQUIRE(!sp.vin.empty()); CHECK(!pool.add(sp, u, why)); }          // fee 1 < min 100
-  { std::string w2; Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 500, c.params.addrVersion, w2);
-    REQUIRE(!sp.vin.empty()); CHECK(pool.add(sp, u, why)); CHECK(pool.size() == 1); }
+  int sh = c.height() + 1;
+  { Transaction cb; cb.vin.resize(1); CHECK(!pool.add(cb, u, sh, why)); }  // coinbase rejected
+  { std::string w2; Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 1, c.params.addrVersion, c.height() + 1, w2);
+    REQUIRE(!sp.vin.empty()); CHECK(!pool.add(sp, u, sh, why)); }          // fee 1 < min 100
+  { std::string w2; Transaction sp = buildSpend(w, u, addr, addr, SWARF_PER_COIN, 500, c.params.addrVersion, c.height() + 1, w2);
+    REQUIRE(!sp.vin.empty()); CHECK(pool.add(sp, u, sh, why)); CHECK(pool.size() == 1); }
 }
 
 TEST_CASE("side fork stored, longer fork triggers reorg with correct balances") {
@@ -184,8 +187,8 @@ TEST_CASE("unauthorized spend rejected at connect (pkh mismatch)") {
   std::vector<uint8_t> ss(sig.begin(), sig.end());
   ss.insert(ss.end(), tpk.d.begin(), tpk.d.end());
   evil.vin[0].scriptSig = ss;
-  CHECK(!checkInputs(evil, u, why)); CHECK(why == "pkh-mismatch");
-  CHECK(!pool.add(evil, u, why));
+  CHECK(!checkInputs(evil, u, 1000, why)); CHECK(why == "pkh-mismatch");
+  CHECK(!pool.add(evil, u, 1000, why));
   // ...and inside a mined block
   Block b = mineBlock(c, pool, vh, false);
   b.txs.push_back(evil);
@@ -204,13 +207,15 @@ TEST_CASE("mempool rejects double-spend across pooled txs, recheck drops spent")
   REQUIRE(addressToHash(addr, vv, h160));
   std::string why;
   REQUIRE(c.acceptBlock(mineBlock(c, pool, h160), why));
+  mineToHeight(c, pool, h160, 101); // spends need mature coinbases
   std::map<OutPoint, Coin> u; c.getUtxoSnapshot(u);
+  int sh = c.height() + 1;
   std::string w2;
-  Transaction t1 = buildSpend(w, u, addr, other, SWARF_PER_COIN, 500, c.params.addrVersion, w2);
-  REQUIRE(!t1.vin.empty()); REQUIRE(pool.add(t1, u, why));
-  Transaction t2 = buildSpend(w, u, addr, other, 2 * SWARF_PER_COIN, 500, c.params.addrVersion, w2);
+  Transaction t1 = buildSpend(w, u, addr, other, SWARF_PER_COIN, 500, c.params.addrVersion, c.height() + 1, w2);
+  REQUIRE(!t1.vin.empty()); REQUIRE(pool.add(t1, u, sh, why));
+  Transaction t2 = buildSpend(w, u, addr, other, 2 * SWARF_PER_COIN, 500, c.params.addrVersion, c.height() + 1, w2);
   REQUIRE(!t2.vin.empty());
-  CHECK(!pool.add(t2, u, why)); CHECK(why == "mempool-conflict");
+  CHECK(!pool.add(t2, u, sh, why)); CHECK(why == "mempool-conflict");
   // mine t1 in; recheck must drop nothing else (pool empty after remove)
   Block b = mineBlock(c, pool, h160);
   REQUIRE(b.txs.size() == 2);
@@ -219,5 +224,5 @@ TEST_CASE("mempool rejects double-spend across pooled txs, recheck drops spent")
   CHECK(pool.size() == 0);
   // a tx spending the now-spent coin must fail against a fresh snapshot
   std::map<OutPoint, Coin> u2; c.getUtxoSnapshot(u2);
-  CHECK(!pool.add(t2, u2, why)); CHECK(why == "missing-input");
+  CHECK(!pool.add(t2, u2, c.height() + 1, why)); CHECK(why == "missing-input");
 }

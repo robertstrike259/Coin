@@ -82,7 +82,7 @@ TEST_CASE("buildSpend: exact change, insufficient, bad address") {
   view[{ft, 0}] = {5 * SWARF_PER_COIN, fph, 7, false};
   std::string why;
   // spend 2 CON + 1000 swarf fee -> change 2.99999 CON
-  Transaction t = buildSpend(w, view, from, to, 2 * SWARF_PER_COIN, 1000, 0x6F, why);
+  Transaction t = buildSpend(w, view, from, to, 2 * SWARF_PER_COIN, 1000, 0x6F, 1000, why);
   REQUIRE(t.vin.size() == 1);
   REQUIRE(t.vout.size() == 2);
   CHECK(t.vout[0].value == 2 * SWARF_PER_COIN);
@@ -90,13 +90,13 @@ TEST_CASE("buildSpend: exact change, insufficient, bad address") {
   CHECK(checkTx(t, why));
   CHECK(txFee(t, view) == 1000);
   // insufficient
-  Transaction t2 = buildSpend(w, view, from, to, 5 * SWARF_PER_COIN, 1000, 0x6F, why);
+  Transaction t2 = buildSpend(w, view, from, to, 5 * SWARF_PER_COIN, 1000, 0x6F, 1000, why);
   CHECK(t2.vin.empty()); CHECK(why == "insufficient");
   // bad destination
-  Transaction t3 = buildSpend(w, view, from, "!!bad!!", 1000, 1000, 0x6F, why);
+  Transaction t3 = buildSpend(w, view, from, "!!bad!!", 1000, 1000, 0x6F, 1000, why);
   CHECK(t3.vin.empty()); CHECK(why == "bad-to");
   // unknown sender key
-  Transaction t4 = buildSpend(w, view, to + "x", to, 1000, 1000, 0x6F, why);
+  Transaction t4 = buildSpend(w, view, to + "x", to, 1000, 1000, 0x6F, 1000, why);
   CHECK(t4.vin.empty()); CHECK(why == "no-key");
 }
 
@@ -109,7 +109,7 @@ TEST_CASE("dust change folds into fee") {
   view[{ft, 0}] = {2 * SWARF_PER_COIN, fph, 7, false};
   std::string why;
   // change would be 500 < dust(1000) -> single output, fee absorbs it
-  Transaction t = buildSpend(w, view, from, to, 2 * SWARF_PER_COIN - 1000 - 500, 1000, 0x6F, why);
+  Transaction t = buildSpend(w, view, from, to, 2 * SWARF_PER_COIN - 1000 - 500, 1000, 0x6F, 1000, why);
   REQUIRE(t.vin.size() == 1);
   CHECK(t.vout.size() == 1);
   CHECK(txFee(t, view) == 1500);
@@ -131,10 +131,10 @@ TEST_CASE("buildSpend signs each input with its own key (multi-address wallet)")
   view[{f2, 0}] = {6 * SWARF_PER_COIN, h2, 5, false};
   std::string why;
   // spend 10 CON: must consume both UTXOs (fee 1000), change ~2 CON - fee
-  Transaction t = buildSpend(w, view, k1, k1, 10 * SWARF_PER_COIN, 1000, 0x6F, why);
+  Transaction t = buildSpend(w, view, k1, k1, 10 * SWARF_PER_COIN, 1000, 0x6F, 1000, why);
   REQUIRE(t.vin.size() == 2);
   CHECK(checkTx(t, why));
-  CHECK(checkInputs(t, view, why));
+  CHECK(checkInputs(t, view, 1000, why));
   CHECK(txFee(t, view) == 1000);
   // each input carries a distinct signature bound to its index...
   CHECK(t.vin[0].scriptSig != t.vin[1].scriptSig);
@@ -155,7 +155,7 @@ TEST_CASE("buildSpend signs each input with its own key (multi-address wallet)")
   // are selectable) and must fail loudly, not mis-sign
   Wallet w3;
   w3.keys[k1] = w.keys[k1]; // only the first key
-  Transaction missing = buildSpend(w3, view, k1, k1, 10 * SWARF_PER_COIN, 1000, 0x6F, why);
+  Transaction missing = buildSpend(w3, view, k1, k1, 10 * SWARF_PER_COIN, 1000, 0x6F, 1000, why);
   CHECK(missing.vin.empty());
   CHECK(why == "insufficient");
 }

@@ -97,7 +97,10 @@ uint32_t retargetBits(uint32_t old, int64_t actual_, int64_t target) {
     uint64_t v = q[i];
     for (int j = 0; j < 8; ++j) nt.d[i * 8 + j] = (v >> (8 * j)) & 0xff;
   }
-  uint256 lim = bitsToTarget(0x1e0fffff);
+  // Clamp to the pow limit: the EASIEST allowed target. It must stay >= the
+  // genesis bits of every network (all use 0x207fffff); a harder limit would
+  // brick the chain at the first retarget with an unmineable jump.
+  uint256 lim = bitsToTarget(0x207fffff);
   if (lim < nt) nt = lim;
   return targetToBits(nt);
 }

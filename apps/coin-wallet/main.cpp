@@ -13,13 +13,19 @@
 #include <tuple>
 static std::vector<uint8_t> unhex(const std::string& s){ std::vector<uint8_t> o; for(size_t i=0;i+1<s.size();i+=2) o.push_back(strtoul(s.substr(i,2).c_str(),nullptr,16)); return o; }
 static std::string hexof(const std::vector<uint8_t>& v){ static const char*h="0123456789abcdef"; std::string s; for(auto b:v){s.push_back(h[b>>4]);s.push_back(h[b&15]);} return s; }
-// unspent entries from listunspent: {txid, vout, value_swarf, height}
-static void parseUnspent(const std::string& js, std::vector<std::tuple<std::string,uint32_t,CAmount,int>>& out){
+// unspent entries from listunspent: {txid, vout, value_swarf, height, coinbase}
+static void parseUnspent(const std::string& js, std::vector<std::tuple<std::string,uint32_t,CAmount,int,bool>>& out){
   try{
     auto j=nlohmann::json::parse(js);
     for(auto&e:j.value("unspent",nlohmann::json::array()))
-      out.emplace_back(e["txid"].get<std::string>(),e["vout"].get<uint32_t>(),e["value_swarf"].get<CAmount>(),e["height"].get<int>());
+      out.emplace_back(e["txid"].get<std::string>(),e["vout"].get<uint32_t>(),e["value_swarf"].get<CAmount>(),e["height"].get<int>(),e.value("coinbase",false));
   }catch(...){}
+}
+static int tipHeight(int rpcport){
+  try{
+    auto j=nlohmann::json::parse(rpcCall(rpcport,"getblockchaininfo","{}"));
+    return j.value("height",-1);
+  }catch(...){ return -1; }
 }
 static std::string argval(int argc,char**argv,const std::string& k){
   for(int i=1;i<argc;++i){ std::string a=argv[i];
@@ -105,16 +111,19 @@ int main(int argc,char**argv){
       else if(!w.has(from)){ std::cout<<"no key for "<<from<<"\n"; rc=1; }
       else{
         auto uj=rpcCall(c.rpcport,"listunspent","{\"address\":\""+from+"\"}");
-        std::vector<std::tuple<std::string,uint32_t,CAmount,int>> u; parseUnspent(uj,u);
+        std::vector<std::tuple<std::string,uint32_t,CAmount,int,bool>> u; parseUnspent(uj,u);
         if(u.empty()){ std::cout<<"no unspent for "<<from<<": "<<uj<<"\n"; rc=1; }
         else{
+          int tip=tipHeight(c.rpcport); if(tip<0){ std::cout<<"daemon unreachable\n"; rc=1; }
+          else{
           std::map<OutPoint,Coin> view;
           { PubKey pk; auto it=w.keys.find(from); ecc_pubkey(it->second,pk);
             auto fh=hash160_pubkey({pk.d.begin(),pk.d.end()});
-            for(auto&e:u){ OutPoint o{uint256::fromHex(std::get<0>(e)),std::get<1>(e)}; view[o]={std::get<2>(e),fh,std::get<3>(e),false}; } }
-          std::string why; Transaction t=buildSpend(w,view,from,to,swarf,fee,c.params().addrVersion,why);
+            for(auto&e:u){ OutPoint o{uint256::fromHex(std::get<0>(e)),std::get<1>(e)}; view[o]={std::get<2>(e),fh,std::get<3>(e),std::get<4>(e)}; } }
+          std::string why; Transaction t=buildSpend(w,view,from,to,swarf,fee,c.params().addrVersion,tip+1,why);
           if(t.vin.empty()){ std::cout<<"build failed: "<<why<<"\n"; rc=1; }
           else std::cout<<rpcCall(c.rpcport,"sendrawtransaction","{\"hex\":\""+hexof(t.serialize())+"\"}")<<"\n";
+          }
         }
       }
     }

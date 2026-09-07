@@ -7,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstring>
+#include <algorithm>
 
 uint32_t Wallet::kdfMemKib = 65536; // 64 MiB
 uint32_t Wallet::kdfPasses = 3;
@@ -256,7 +257,8 @@ std::vector<std::string> Wallet::addresses() const {
   return o;
 }
 Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, const std::string& from,
-                       const std::string& to, CAmount amount, CAmount fee, uint8_t ver, std::string& why) {
+                       const std::string& to, CAmount amount, CAmount fee, uint8_t ver, int spendHeight,
+                       std::string& why) {
   static constexpr CAmount DUST = 1000;
   if (amount <= 0) { why = "bad-amount"; return {}; }
   if (fee < 0) { why = "bad-fee"; return {}; }
@@ -282,15 +284,23 @@ Transaction buildSpend(const Wallet& w, const std::map<OutPoint, Coin>& utxo, co
   }
   Transaction t;
   CAmount in = 0;
+  // Oldest-first, skipping immature coinbases: the selected set must be
+  // spendable at spendHeight or checkInputs (and consensus) will reject it.
+  std::vector<std::pair<OutPoint, Coin>> cands;
   for (auto& kv : utxo) {
-    if (ownedKey.count(kv.second.pkh)) {
-      TxIn i;
-      i.prevTx = kv.first.tx;
-      i.prevOut = kv.first.n;
-      t.vin.push_back(i);
-      in += kv.second.value;
-      if (in >= amount + fee) break;
-    }
+    if (!ownedKey.count(kv.second.pkh)) continue;
+    if (kv.second.coinbase && spendHeight - kv.second.height < COINBASE_MATURITY) continue;
+    cands.push_back(kv);
+  }
+  std::sort(cands.begin(), cands.end(),
+            [](const auto& a, const auto& b) { return a.second.height < b.second.height; });
+  for (auto& kv : cands) {
+    TxIn i;
+    i.prevTx = kv.first.tx;
+    i.prevOut = kv.first.n;
+    t.vin.push_back(i);
+    in += kv.second.value;
+    if (in >= amount + fee) break;
   }
   if (in < amount + fee) { why = "insufficient"; return {}; }
   TxOut o1{amount, th};

@@ -36,3 +36,13 @@ inline Block mineBlock(Chain& chain, Mempool& pool, const std::vector<uint8_t>& 
   }
   return t;
 }
+// Mine empty blocks until the chain reaches targetH (for maturity tests).
+inline void mineToHeight(Chain& chain, Mempool& pool, const std::vector<uint8_t>& payTo, int targetH) {
+  for (int guard = 0; chain.height() < targetH; ++guard) {
+    if (guard > targetH + 10000) throw std::runtime_error("mineToHeight stuck");
+    Block b = mineBlock(chain, pool, payTo, false);
+    std::string why;
+    bool conn = false;
+    if (!chain.acceptBlock(b, why, conn) || !conn) throw std::runtime_error("mineToHeight: " + why);
+  }
+}

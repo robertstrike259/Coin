@@ -60,10 +60,10 @@ void P2P::start(){
             Block b; if(chain.getBlockByHash(want,b)){ auto m=p2pMsg(chain.params,"block",b.serialize()); snexact(c,m.data(),m.size()); } }
           else if(cs=="block"){ try{ Block b=Block::deserialize(pl); std::string why; bool conn=false;
               if(chain.acceptBlock(b,why,conn)){ chain.save();
-                std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v);
+                std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v,chain.height()+1);
                 if(conn){ broadcast("block",b.serialize(),c); if(onBlock)onBlock(b); } } }catch(...){} }
           else if(cs=="tx"){ try{ Transaction t=Transaction::deserialize(pl); std::string why; std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v);
-              if(pool.add(t,v,why)) broadcast("tx",t.serialize(),c); }catch(...){} }
+              if(pool.add(t,v,chain.height()+1,why)) broadcast("tx",t.serialize(),c); }catch(...){} }
           else if(cs=="version"){ auto m=p2pMsg(chain.params,"verack",{}); snexact(c,m.data(),m.size()); }
         }
         { std::lock_guard<std::mutex> l(liveM); live.erase(c); }
@@ -99,10 +99,10 @@ bool P2P::connectPeer(const std::string& host,int p){
         Block b; if(chain.getBlockByHash(want,b)){ auto mm=p2pMsg(chain.params,"block",b.serialize()); snexact(s,mm.data(),mm.size()); } }
       else if(cs=="block"){ try{ Block b=Block::deserialize(pl); std::string why; bool conn=false;
           if(chain.acceptBlock(b,why,conn)){ chain.save();
-            std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v);
+            std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v); pool.recheck(v,chain.height()+1);
             if(conn){ broadcast("block",b.serialize(),s); if(onBlock)onBlock(b); } } }catch(...){} }
       else if(cs=="tx"){ try{ Transaction t=Transaction::deserialize(pl); std::string why; std::map<OutPoint,Coin> v; chain.getUtxoSnapshot(v);
-          if(pool.add(t,v,why)) broadcast("tx",t.serialize(),s); }catch(...){} }
+          if(pool.add(t,v,chain.height()+1,why)) broadcast("tx",t.serialize(),s); }catch(...){} }
       else if(cs=="pong"){}
       else if(cs=="verack"){}
       else if(cs=="ping"){ auto mm=p2pMsg(chain.params,"pong",pl); snexact(s,mm.data(),mm.size()); }

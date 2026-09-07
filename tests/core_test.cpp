@@ -57,7 +57,17 @@ TEST_CASE("difficulty bits roundtrip + pow-limit clamp") {
   uint32_t base = 0x1e0fffff;
   CHECK(retargetBits(base, 1, 1000) == retargetBits(base, 250, 1000));
   CHECK(retargetBits(base, 100000, 1000) == retargetBits(base, 4000, 1000));
-  // direction: use a base below the pow limit so both directions can move
+  // pow-limit invariant: retarget must never return a target EASIER than the
+  // limit (0x207fffff), and every network's genesis bits must equal it, or
+  // the first retarget bricks the chain with an unmineable jump.
+  uint256 lim = bitsToTarget(0x207fffff);
+  for (uint32_t b : {0x1e0fffffU, 0x1d00ffffU, 0x207fffffU, 0x1c0fffffU})
+    for (int64_t a : {1LL, 60LL, 1000LL, 100000LL})
+      CHECK(bitsToTarget(retargetBits(b, a, 1000)) <= lim);
+  CHECK(mainParams().genesisBits == 0x207fffff);
+  CHECK(testParams().genesisBits == 0x207fffff);
+  CHECK(regtestParams().genesisBits == 0x207fffff);
+  // direction: below the limit both directions move as expected
   uint32_t bbase = 0x1c0fffff;
   uint32_t fast = retargetBits(bbase, 500, 1000);
   uint32_t slow = retargetBits(bbase, 2000, 1000);

@@ -11,9 +11,10 @@
 struct Mempool {
   std::mutex m; std::map<std::string,Transaction> txs; // hex txid
   std::map<OutPoint,std::string> spentBy;              // outpoint -> spending txid
-  bool add(const Transaction& t, const std::map<OutPoint,Coin>& view, std::string& why);
+  // spendHeight = height the tx would confirm at (callers pass tip height + 1).
+  bool add(const Transaction& t, const std::map<OutPoint,Coin>& view, int spendHeight, std::string& why);
   std::vector<Transaction> templ() ;
   void remove(const std::vector<Transaction>& mined);
-  void recheck(const std::map<OutPoint,Coin>& view); // drop txs invalid under new tip
+  void recheck(const std::map<OutPoint,Coin>& view, int spendHeight); // drop txs invalid under new tip
   size_t size();
 };

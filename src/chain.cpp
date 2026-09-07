@@ -64,7 +64,7 @@ bool checkConnect(const ChainParams& p, const Block& b, int h,
   fees=0;
   for(size_t i=1;i<b.txs.size();++i){
     auto& t=b.txs[i];
-    if(!checkInputs(t,view,why)) return false; // existence, dup, pkh auth, sig
+    if(!checkInputs(t,view,h,why)) return false; // existence, dup, maturity, pkh auth, sig
     CAmount f=txFee(t,view); if(f<0){why="missing-utxo";return false;}
     CAmount out=0; for(auto&o:t.vout) out+=o.value;
     fees+=f;
