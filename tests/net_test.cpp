@@ -68,28 +68,73 @@ TEST_CASE("p2p loopback: two nodes connect, headers sync") {
   na.halt(); nb.halt();
 }
 
-#ifndef _WIN32
-#include <sys/socket.h>
-TEST_CASE("transport loops: fragmented 1MB roundtrip, close, empty") {
-  int sv[2];
-  REQUIRE(::socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
-  // tiny buffers force heavy fragmentation: many partial send/recv iterations
-  int small = 4096;
-  REQUIRE(::setsockopt(sv[0], SOL_SOCKET, SO_SNDBUF, &small, sizeof small) == 0);
-  REQUIRE(::setsockopt(sv[1], SOL_SOCKET, SO_RCVBUF, &small, sizeof small) == 0);
+TEST_CASE("transport loops: fragmented 1MB roundtrip, close, empty (loopback TCP)") {
+  asio::io_context io;
+  auto acc = net::listen(io, 19551, true);
+  REQUIRE(acc);
+  net::tcp::socket srv(io);
+  std::thread at([&] { asio::error_code ec; acc->accept(srv, ec); });
+  net::tcp::socket cli(io);
+  REQUIRE(net::connect(io, cli, "127.0.0.1", 19551));
+  at.join();
+  // Smaller-than-payload buffers force fragmentation through the exact-size
+  // loops. (Kept at 64KB: 4KB windows interact with delayed ACKs and make
+  // loopback bulk transfer pathologically slow without testing anything more.)
+  asio::socket_base::send_buffer_size small(65536);
+  asio::socket_base::receive_buffer_size rsmall(65536);
+  asio::error_code ec;
+  cli.set_option(small, ec); srv.set_option(rsmall, ec);
   std::vector<uint8_t> tx(1024 * 1024);
   for (size_t i = 0; i < tx.size(); ++i) tx[i] = (uint8_t)(i * 31 + 7);
   std::vector<uint8_t> rx(tx.size(), 0);
-  std::thread t([&] { CHECK(plt::send_all(sv[0], tx.data(), tx.size())); });
-  CHECK(plt::recv_all(sv[1], rx.data(), rx.size()));
+  std::thread t([&] { CHECK(net::write_all(cli, tx.data(), tx.size())); });
+  CHECK(net::read_exact(srv, rx.data(), rx.size()));
   t.join();
   CHECK(rx == tx);
-  CHECK(plt::send_all(sv[0], nullptr, 0));
-  CHECK(plt::recv_all(sv[1], nullptr, 0));
+  CHECK(net::write_all(cli, nullptr, 0));
+  CHECK(net::read_exact(srv, nullptr, 0));
   // abrupt peer close surfaces as failure, never a hang
-  plt::close_socket(sv[0]);
+  cli.shutdown(net::tcp::socket::shutdown_both, ec); cli.close(ec);
   uint8_t one = 0;
-  CHECK(!plt::recv_all(sv[1], &one, 1));
-  plt::close_socket(sv[1]);
+  CHECK(!net::read_exact(srv, &one, 1));
+  srv.close(ec);
 }
-#endif
+
+TEST_CASE("address resolution: IPv4, IPv6, hostnames") {
+  asio::io_context io;
+  net::tcp::resolver res(io);
+  asio::error_code ec;
+  // numeric literals resolve without any network access
+  auto v4 = res.resolve("127.0.0.1", "1", ec);
+  CHECK(!ec);
+  bool sawV4 = false;
+  for (auto& e : v4) sawV4 = sawV4 || e.endpoint().address().is_v4();
+  CHECK(sawV4);
+  auto v6 = res.resolve("::1", "1", ec);
+  CHECK(!ec);
+  bool sawV6 = false;
+  for (auto& e : v6) sawV6 = sawV6 || e.endpoint().address().is_v6();
+  CHECK(sawV6);
+  CHECK(asio::ip::make_address("::1").is_v6());
+  CHECK(asio::ip::make_address("127.0.0.1").is_v4());
+  // best-effort live IPv6 roundtrip on a dual-stack wildcard listener
+  // (loopback listeners stay IPv4-only by design; skipped where v6 is absent)
+  auto acc6 = net::listen(io, 19552, false);
+  if (acc6) {
+    net::tcp::socket srv(io);
+    std::thread at([&] { asio::error_code e2; acc6->accept(srv, e2); });
+    net::tcp::socket cli(io);
+    if (net::connect(io, cli, "::1", 19552)) {
+      at.join();
+      uint8_t w[4] = {9, 8, 7, 6}, r[4] = {};
+      CHECK(net::write_all(cli, w, 4));
+      CHECK(net::read_exact(srv, r, 4));
+      CHECK(memcmp(w, r, 4) == 0);
+    } else {
+      at.detach();
+      MESSAGE("no IPv6 loopback route: live v6 test skipped (resolution above still proves parsing)");
+    }
+  } else {
+    MESSAGE("cannot bind IPv6 loopback: live v6 test skipped (resolution above still proves parsing)");
+  }
+}

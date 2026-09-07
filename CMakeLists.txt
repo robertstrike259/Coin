@@ -65,6 +65,14 @@ if(COIN_FETCH_DEPS)
     endif()
   endif()
 
+  # standalone Asio (BSL-1.0, header-only) - portable dual-stack TCP.
+  # Only the sync socket/resolver API is used; threading stays std::thread.
+  FetchContent_Declare(asio
+    GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+    GIT_TAG asio-1-38-2
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(asio)
+
   # nlohmann/json (MIT) - RPC + wallet JSON
   FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
   FetchContent_MakeAvailable(json)
@@ -82,6 +90,9 @@ add_library(coin STATIC ${LIBCOIN_SRC})
 target_include_directories(coin PUBLIC src)
 find_package(Threads REQUIRED)
 target_link_libraries(coin PUBLIC Threads::Threads OpenSSL::Crypto secp256k1 argon2 nlohmann_json::nlohmann_json)
+# Standalone Asio ships no CMake target: use headers directly (BSL-1.0).
+target_include_directories(coin PUBLIC ${asio_SOURCE_DIR}/asio/include)
+target_compile_definitions(coin PUBLIC ASIO_STANDALONE)
 # Debian/Ubuntu multiarch OpenSSL headers (opensslconf.h lives in arch subdir)
 foreach(_ad x86_64-linux-gnu aarch64-linux-gnu)
   if(EXISTS "${OPENSSL_INCLUDE_DIR}/${_ad}")

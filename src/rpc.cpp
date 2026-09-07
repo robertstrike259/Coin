@@ -1,7 +1,9 @@
 #include "rpc.h"
 #include "hash.h"
 #include "platform.h"
+#include "net.h"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <sstream>
 #include <iostream>
 #include <cstring>
@@ -76,12 +78,28 @@ static std::string handle(RpcServer& self,const std::string& method,const json& 
   return "{\"error\":\"unknown\"}";
 }
 void RpcServer::start(){
-  plt::net_init();
+  plt::ignore_sigpipe();
   th=std::thread([this]{
-    plt::socket_t s=plt::tcp_socket(); plt::set_reuseaddr(s);
-    if(s==plt::BAD_SOCKET||!plt::bind_loopback(s,(uint16_t)port)||!plt::listen_on(s)){ std::cerr<<"rpc bind "<<port<<" failed\n"; return; }
-    while(!stop){ plt::socket_t c=plt::accept_one(s); if(c==plt::BAD_SOCKET){if(stop)break;continue;}
-      std::string req; char buf[4096]; long r=plt::recv_once(c,buf,sizeof buf-1); if(r>0){buf[r]=0;req=buf;
+    auto acc=net::listen(io,(uint16_t)port,true); // loopback only
+    if(!acc){ std::cerr<<"rpc bind "<<port<<" failed\n"; return; }
+    acceptor=std::move(acc);
+    while(!stop){
+      net::tcp::socket c(io);
+      asio::error_code ec; acceptor->accept(c,ec);
+      if(ec){ if(stop)break; continue; }
+      // read headers + body (requests are small; single read loop to blank line)
+      std::string req; char buf[4096];
+      for(;;){ size_t r=0; { asio::error_code e2; r=asio::read(c,asio::buffer(buf,sizeof buf-1),asio::transfer_at_least(1),e2); if(e2) break; }
+        buf[r]=0; req.append(buf,r); if(req.find("\r\n\r\n")!=std::string::npos) break; if(req.size()>65536) break; }
+      // honor Content-Length: keep reading until the full body arrives
+      auto clen=[&]()->size_t{ auto p=req.find("Content-Length:"); if(p==std::string::npos) return 0;
+        return (size_t)strtoul(req.c_str()+p+15,nullptr,10); };
+      { auto bodypos=req.find("\r\n\r\n"); size_t have=bodypos==std::string::npos?0:req.size()-bodypos-4;
+        size_t want=clen();
+        while(have<want&&req.size()<1048576){ char b2[4096]; asio::error_code e2;
+          size_t r=asio::read(c,asio::buffer(b2,std::min<size_t>(sizeof b2,want-have)),asio::transfer_at_least(1),e2);
+          if(e2||r==0) break; req.append(b2,r); have+=r; } }
+      if(!req.empty()){
         std::string method; json prm=json::object();
         try{
           auto bodypos=req.find("\r\n\r\n"); std::string jb=bodypos==std::string::npos?req:req.substr(bodypos+4);
@@ -89,27 +107,25 @@ void RpcServer::start(){
         }catch(...){}
         std::string body=handle(*this,method,prm);
         std::ostringstream o; o<<"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;
-        auto so=o.str(); plt::send_all(c,(const uint8_t*)so.data(),so.size());
+        auto so=o.str(); net::write_all(c,(const uint8_t*)so.data(),so.size());
       }
-      plt::close_socket(c);
+      asio::error_code ec2; c.shutdown(net::tcp::socket::shutdown_both,ec2); c.close(ec2);
     }
-    plt::close_socket(s);
   });
 }
-void RpcServer::halt(){ stop=true; plt::connect_self((uint16_t)port); if(th.joinable())th.join(); }
+void RpcServer::halt(){ stop=true;
+  net::poke((uint16_t)port); // unblock the accept() before joining
+  if(acceptor){ asio::error_code ec; acceptor->close(ec); }
+  if(th.joinable())th.join(); }
 std::string rpcCall(int port,const std::string& method,const std::string& paramsJson){
-  plt::net_init();
-  plt::socket_t s=plt::tcp_socket(); if(s==plt::BAD_SOCKET) return "{\"error\":\"connect\"}";
-  sockaddr_in a{}; a.sin_family=AF_INET; a.sin_port=htons((uint16_t)port); a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
-#ifdef _WIN32
-  bool ok = ::connect(s,(sockaddr*)&a,sizeof a)==0;
-#else
-  bool ok = ::connect(s,(sockaddr*)&a,sizeof a)==0;
-#endif
-  if(!ok){ plt::close_socket(s); return "{\"error\":\"connect\"}"; }
-  std::string body="{\"method\":\""+method+"\",\"params\":"+paramsJson+"}";
-  std::ostringstream o; o<<"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;
-  auto q=o.str(); plt::send_all(s,(const uint8_t*)q.data(),q.size());
-  std::string resp; char b[4096]; long r; while((r=plt::recv_once(s,b,sizeof b))>0) resp.append(b,r); plt::close_socket(s);
-  auto f=resp.find("\r\n\r\n"); return f==std::string::npos?resp:resp.substr(f+4);
+  try{
+    asio::io_context io; net::tcp::socket s(io);
+    if(!net::connect(io,s,"127.0.0.1",(uint16_t)port)) return "{\"error\":\"connect\"}";
+    std::string body="{\"method\":\""+method+"\",\"params\":"+paramsJson+"}";
+    std::ostringstream o; o<<"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;
+    auto q=o.str(); if(!net::write_all(s,(const uint8_t*)q.data(),q.size())) return "{\"error\":\"connect\"}";
+    std::string resp; char b[4096]; asio::error_code ec;
+    while(!ec){ size_t r=asio::read(s,asio::buffer(b,sizeof b),asio::transfer_at_least(1),ec); if(r) resp.append(b,r); }
+    auto f=resp.find("\r\n\r\n"); return f==std::string::npos?resp:resp.substr(f+4);
+  }catch(...){ return "{\"error\":\"connect\"}"; }
 }

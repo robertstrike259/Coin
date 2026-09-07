@@ -12,7 +12,7 @@ established open-source libraries - no hand-rolled crypto:
 | JSON (RPC) | nlohmann/json | MIT |
 | Tests | doctest | MIT |
 | GUI (optional) | Qt6 | LGPL |
-| Sockets | thin `src/platform.h` shim over BSD/WinSock | none |
+| Sockets | standalone Asio (BSL-1.0), dual-stack IPv4/IPv6 | - |
 
 `secp256k1`, `argon2`, `nlohmann/json`, `doctest` are fetched automatically
 by CMake FetchContent (pinned tags). OpenSSL comes from the OS:

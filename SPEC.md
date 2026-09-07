@@ -38,7 +38,9 @@
   every tip change. The mempool is in-memory only and does not survive restarts:
   unconfirmed transactions must be rebroadcast.
 - P2P: 2 MiB message cap, headers-first IBD (2000/page), block/tx gossip
-  relay, real peer counts in RPC.
+  relay, real peer counts in RPC. Transport is standalone Asio: peers may
+  connect over IPv4, IPv6, or hostnames (resolver tries all endpoints);
+  listeners are dual-stack wildcards, RPC stays IPv4 loopback-only.
 - Storage: atomic `blocks.dat` writes (`CON1` magic + checksum); corrupt files
   are archived to `.corrupt`, never silently wiped.
 - DoS bounds: every length prefix is validated before allocation (tx/block
