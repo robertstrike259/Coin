@@ -1,5 +1,6 @@
 #include "config.h"
 #include "chain.h"
+#include "ecc.h"
 #include "mempool.h"
 #include "p2p.h"
 #include "rpc.h"
@@ -11,6 +12,7 @@ static bool gStop=false;
 int main(int argc,char**argv){
   for(int i=1;i<argc;++i){ std::string a=argv[i]; if(a=="--help"||a=="-h"){ std::cout<<"coind - Coin (CON) node daemon\n--datadir --net main|testnet|regtest --port --rpcport --mining-address ADDR --peer HOST:PORT\n"; return 0; } }
   Config c=parseArgs(argc,argv,"coind");
+  { std::string e; if(!ecc_init(e)){ std::cerr<<"fatal: "<<e<<"\n"; return 1; } }
   if(!c.miningAddress.empty()){ uint8_t v; std::vector<uint8_t> h;
     if(!addressToHash(c.miningAddress,v,h)) std::cerr<<"warning: --mining-address is not a valid address; templates will pay burn output\n"; }
   Chain chain(c.params(),c.datadir); Mempool pool;

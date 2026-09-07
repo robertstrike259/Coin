@@ -1,5 +1,6 @@
 #include "rpc.h"
 #include "core.h"
+#include "ecc.h"
 #include "pow.h"
 #include "difficulty.h"
 #include "platform.h"
@@ -26,6 +27,7 @@ int main(int argc,char**argv){
     if(a=="--threads"&&i+1<argc)threads=std::max(1,num(argv[++i],threads));
     if(a=="--blocks"&&i+1<argc)nblocks=std::max(1,num(argv[++i],nblocks));
     if((a=="--address"||a=="--mining-address")&&i+1<argc)addr=argv[++i]; }
+  { std::string e; if(!ecc_init(e)){ std::cout<<"fatal: "<<e<<"\n"; return 1; } }
   ChainParams p = net=="main"?mainParams():net=="testnet"?testParams():regtestParams();
   for(int b=0;b<nblocks;++b){
     bool done=false;

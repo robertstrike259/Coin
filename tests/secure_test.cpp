@@ -85,3 +85,29 @@ TEST_CASE("SecureString: no copies, clear cleanses, move transfers") {
   CHECK(memcmp(n.data(), snapshot, strlen(secret)) == 0);
   CHECK(n.data() == mptr); // no copy: same heap block
 }
+
+TEST_CASE("secp256k1 context failure fails safe, never crashes") {
+  // test seam: force allocation-failure path
+  REQUIRE(setenv("COIN_ECC_FAIL_INIT", "1", 1) == 0);
+  std::string why;
+  CHECK(!ecc_init(why));
+  CHECK(!why.empty());
+  SecKey k; // zero key (no valid scalar available)
+  PubKey pk;
+  CHECK(!ecc_pubkey(k, pk));
+  std::vector<uint8_t> m(32, 1);
+  std::array<uint8_t, 64> sig{};
+  CHECK(!ecc_sign(k, m, sig));
+  pk.d.fill(0); pk.d[0] = 0x02;
+  CHECK(!ecc_verify(pk, m, sig));
+  SecKey g = ecc_generate();
+  bool iszero = true;
+  for (auto x : g.d) iszero = iszero && (x == 0);
+  CHECK(iszero); // documented invalid-Key sentinel
+  CHECK(!ecc_pubkey(g, pk));
+  REQUIRE(unsetenv("COIN_ECC_FAIL_INIT") == 0);
+  // normal operation resumes afterwards
+  CHECK(ecc_init(why));
+  SecKey ok = ecc_generate();
+  CHECK(ecc_pubkey(ok, pk));
+}

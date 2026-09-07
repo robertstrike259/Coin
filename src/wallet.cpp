@@ -244,7 +244,7 @@ bool Wallet::save(const std::string& file, const SecureString& password) const {
 std::string Wallet::newKey() {
   SecKey sk = ecc_generate();
   PubKey pk;
-  ecc_pubkey(sk, pk);
+  if (!ecc_pubkey(sk, pk)) return ""; // context unavailable: fail loudly, no key
   auto h = hash160_pubkey({pk.d.begin(), pk.d.end()});
   auto a = pubkeyHashToAddress(h, addrVersion);
   keys[a] = sk;

@@ -54,6 +54,7 @@ static SecureString getPassword(int argc,char**argv,const std::string& flag,cons
 }
 int main(int argc,char**argv){
   if(argc<2){ std::cout<<"coin-wallet [--datadir D --net N --rpcport P --password-file F] newkey|addresses|balance ADDR|send FROM TO CON_AMOUNT|encrypt|changepass\n"; return 0; }
+  { std::string e; if(!ecc_init(e)){ std::cout<<"fatal: "<<e<<"\n"; return 1; } }
   Config c=parseArgs(argc,argv,"coin-wallet");
   for(int i=1;i<argc;++i){ std::string a=argv[i]; if(a=="--rpcport"&&i+1<argc){ try{c.rpcport=std::stoi(argv[++i]);}catch(...){} } }
   std::string wfile=c.datadir+"/wallet.dat";
@@ -95,7 +96,7 @@ int main(int argc,char**argv){
     return 1;
   }
   int rc=0;
-  if(cmd=="newkey"){ auto a=w.newKey(); if(!w.save(wfile,pw)) { std::cout<<"save failed\n"; rc=1; } else std::cout<<a<<"\n"; }
+  if(cmd=="newkey"){ auto a=w.newKey(); if(a.empty()){ std::cout<<"key generation failed\n"; return 1; } if(!w.save(wfile,pw)) { std::cout<<"save failed\n"; rc=1; } else std::cout<<a<<"\n"; }
   else if(cmd=="addresses"){ for(auto&a:w.addresses()) std::cout<<a<<"\n"; }
   else if(cmd=="balance"){
     std::string addr; for(int i=1;i<argc;++i){ if(std::string(argv[i])=="balance"&&i+1<argc){addr=argv[i+1];break;} }

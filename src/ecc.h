@@ -12,6 +12,7 @@
 #include <vector>
 #include <cstdint>
 #include <array>
+#include <string>
 struct SecKey {
   std::array<uint8_t, 32> d;
   SecKey();
@@ -29,4 +30,8 @@ struct PubKey {
 bool ecc_pubkey(const SecKey& sk, PubKey& pk);
 bool ecc_sign(const SecKey& sk, const std::vector<uint8_t>& h32, std::array<uint8_t, 64>& sig);
 bool ecc_verify(const PubKey& pk, const std::vector<uint8_t>& h32, const std::array<uint8_t, 64>& sig);
-SecKey ecc_generate();
+SecKey ecc_generate(); // returns a zeroed (invalid) key if the context is unavailable; check with ecc_pubkey
+// Forces secp256k1 context creation at startup. Returns false + reason when
+// creation fails (OOM etc.) so binaries can abort loudly instead of crashing
+// later on a null context. All ecc_* entry points null-check and fail safe.
+bool ecc_init(std::string& why);
